@@ -10,7 +10,8 @@ ninja_begin "$build/build.ninja"
 sources=("$root/host/store_main.cpp" "$root/host/platform_host.cpp" "$root/host/http.cpp")
 while IFS= read -r -d '' path; do sources+=("$path"); done < <(
     find "$root/src" -type f \( -name '*.cpp' -o -name '*.c' \) ! -path '*/platform/*' ! -path '*/runtime/*' \
-        ! -path '*/diag/*' ! -name elevation.cpp ! -name main.cpp ! -name demo_renderer.cpp -print0 | sort -z)
+        ! -path '*/diag/*' ! -name elevation.cpp ! -name main.cpp ! -name demo_renderer.cpp \
+        ! -name store_folder.cpp -print0 | sort -z)
 objects=()
 for source in "${sources[@]}"; do
     name=${source#"$root/"}

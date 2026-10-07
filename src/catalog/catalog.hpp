@@ -22,6 +22,9 @@ bool title_id(std::string_view value);
 bool version(std::string_view value);
 bool update_available(std::string_view installed, std::string_view available);
 bool api_url(std::string_view url);
+inline constexpr const char *kDefaultApi = "https://homebrew.page/api/v1/";
+// Empty input restores the official API; otherwise require an HTTPS directory URL.
+bool normalize_api(std::string_view value, std::string &out);
 bool artifact_url(std::string_view url, bool redirected = false);
 std::string sha256(std::string_view bytes);
 bool hex_bytes(std::string_view text, std::span<std::uint8_t> bytes);
@@ -64,6 +67,8 @@ using PublicKey = std::array<std::uint8_t, 32>;
 std::array<PublicKey, 2> public_keys();
 bool verify_manifest(std::string_view body, std::string_view signature, std::uint64_t highest,
                      std::span<const PublicKey> keys, Manifest &out, std::string &error);
+bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out,
+                    std::string &error);
 bool parse_index(std::string_view body, std::vector<Entry> &out, std::string &error);
 bool parse_detail(std::string_view body, std::string_view expected, Entry &out, std::string &error);
 bool parse_versions(std::string_view body, std::map<std::string, std::string> &out,

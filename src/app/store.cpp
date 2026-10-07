@@ -606,7 +606,7 @@ void Screen::refresh_detail()
     if (app.local_only && catalog_current_ &&
         std::any_of(app.installed.begin(), app.installed.end(),
                     [](const auto &installed) { return installed.managed; }))
-        blocks.push_back(Block::paragraph("This app is no longer listed in the verified catalog. "
+        blocks.push_back(Block::paragraph("This app is no longer listed in the catalog. "
                                           "Check with its developer before using it."));
     if (!app.detail_error.empty())
         blocks.push_back(Block::paragraph("Details unavailable: " + app.detail_error));
@@ -628,7 +628,7 @@ void Screen::refresh_detail()
         }
     }
     else if (app.detail_error.empty() && !app.local_only)
-        blocks.push_back(Block::paragraph("Loading verified app details..."));
+        blocks.push_back(Block::paragraph("Loading app details..."));
     for (const auto &installed : app.installed)
     {
         blocks.push_back(
@@ -1299,6 +1299,13 @@ void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
         {
             if (ask_ == Ask::quit)
                 quit_ = true;
+            else if (ask_ == Ask::disable_signatures)
+            {
+                settings_.verify_signatures = false;
+                settings_changed = true;
+                notify("Catalog settings saved",
+                       "Signatures will not be checked after reopening the store.");
+            }
             else
                 for (const auto &app : apps_)
                     if (app.title_id == ask_id_ && !app.installed.empty())
@@ -1484,8 +1491,9 @@ void Screen::draw_top_bar(const ui::Fonts &fonts)
     // Where the apps come from, said once and quietly beside the name.
     const float x = kMargin + 42.0f + brand + 20.0f;
     list.rounded_rect({x, kTopY - 11.0f, 1.5f, 22.0f}, 0, kInk.with_alpha(0.25f));
-    ui::text(list, fonts.semibold, "homebrew.page", x + 20.0f, centred(kTopY, 20), 20,
-             kAccent.with_alpha(0.92f));
+    ui::text(list, fonts.semibold,
+             active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page" : "Custom catalog",
+             x + 20.0f, centred(kTopY, 20), 20, kAccent.with_alpha(0.92f));
 
     // The sections: words, the active one lit, one gold line gliding under it.
     const auto glyphs = ui::GlyphStyle::dark();
@@ -2167,7 +2175,7 @@ Screen::Offer Screen::offer(const App &app) const
             if (!installer_)
                 out.reason = installer_reason_;
             else if (!app.detail)
-                out.reason = "Waiting for the app's verified details.";
+                out.reason = "Waiting for the app's details.";
             else
             {
                 out.armed = true;
@@ -2246,7 +2254,7 @@ Screen::Offer Screen::offer(const App &app) const
     else if (changes && !guard_)
         out.reason = "Needs the running-app check, which this build doesn't have yet.";
     else if (out.primary == Order::Kind::install && !app.detail)
-        out.reason = "Waiting for the app's verified details.";
+        out.reason = "Waiting for the app's details.";
     else
     {
         out.armed = true;
@@ -2595,8 +2603,9 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
         list.image(qr_texture_, code, gfx::kFullUv, kWhite);
         ui::text(list, fonts.semibold, "Scan for its page and source", code.x + code.w + 26.0f,
                  code.y + 38.0f, 20, kInk.with_alpha(0.86f));
-        ui::text(list, fonts.mono, "homebrew.page/app/" + app.title_id, code.x + code.w + 26.0f,
-                 code.y + 68.0f, 17, kInk.with_alpha(0.55f));
+        ui::text(list, fonts.mono,
+                 fonts.mono.font->fit(app.detail ? app.detail->page : "", 17, 350.0f),
+                 code.x + code.w + 26.0f, code.y + 68.0f, 17, kInk.with_alpha(0.55f));
         list.pop_opacity();
     }
 
@@ -2848,7 +2857,9 @@ std::string format_settings(const Settings &settings)
     return "location=" + settings.location + "\nupdates=" + (settings.check_updates ? "1" : "0") +
            "\nsounds=" + (settings.sounds ? "1" : "0") +
            "\nvibration=" + (settings.vibration ? "1" : "0") +
-           "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") + "\n";
+           "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") +
+           "\ncatalog_url=" + settings.catalog_url +
+           "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") + "\n";
 }
 
 Settings parse_settings(std::string_view text)
@@ -2873,8 +2884,26 @@ Settings parse_settings(std::string_view text)
             settings.vibration = value != "0";
         else if (key == "motion")
             settings.reduce_motion = value == "reduced";
+        else if (key == "catalog_url")
+            catalog::normalize_api(value, settings.catalog_url);
+        else if (key == "verify_signatures")
+            settings.verify_signatures = value != "0";
     }
     return settings;
+}
+
+void Screen::set_catalog_url(std::string_view value)
+{
+    std::string url;
+    if (!catalog::normalize_api(value, url))
+    {
+        notify("Invalid catalog URL",
+               "Enter an HTTPS API directory, such as https://homebrew.page/api/v1/.");
+        return;
+    }
+    settings_.catalog_url = std::move(url);
+    settings_changed = true;
+    notify("Catalog settings saved", "Close and reopen ProsperoStore to use this feed.");
 }
 
 void Screen::set_locations(std::vector<std::pair<std::string, std::uint64_t>> locations)
@@ -2899,6 +2928,8 @@ const App *Screen::self_app() const
 void Screen::open_panel(int tab)
 {
     panel_ = true;
+    development_options_ = false;
+    setting_focus_ = 0;
     panel_tab_ = std::clamp(tab, 0, 2);
     queue_focus_ = 0;
     if (panel_tab_ == 2)
@@ -2914,21 +2945,23 @@ void Screen::write_about()
         // The debug build: what happened at each step, to photograph or send.
         blocks.push_back(Block::heading("Debug trace", 3));
         blocks.push_back(Block::paragraph(
-            debug_file_.empty() ? std::string("Not saved to a file: no writable /data or USB drive.")
-                                : "Also saved to " + debug_file_ + "."));
+            debug_file_.empty()
+                ? std::string("Not saved to a file: no writable /data or USB drive.")
+                : "Also saved to " + debug_file_ + "."));
         for (const auto &line : debug_lines_)
             blocks.push_back(Block::bullet(line));
     }
-    blocks.push_back(Block::paragraph(
-        "ProsperoStore installs, updates and uninstalls the apps listed at homebrew.page, "
-        "the catalog of homebrew for this console."));
+    blocks.push_back(Block::paragraph("ProsperoStore installs, updates and uninstalls apps from "
+                                      "your selected homebrew catalog."));
     blocks.push_back(
         Block::key_value("Version", self_version_.empty() ? "Unknown" : self_version_));
     blocks.push_back(Block::key_value("Catalog", status_));
+    blocks.push_back(Block::key_value("Active API URL", active_catalog_url_));
     blocks.push_back(Block::key_value("New apps go to", settings_.location));
     blocks.push_back(Block::heading("How it keeps installs safe", 3));
     blocks.push_back(
-        Block::bullet("The catalog is signed, and the store refuses one it can't verify."));
+        Block::bullet("Signature verification is on by default. Turning it off trusts the "
+                      "selected feed's publisher without authenticating its catalog."));
     blocks.push_back(
         Block::bullet("A download is checked against the catalog before it is unpacked."));
     blocks.push_back(
@@ -2959,6 +2992,13 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
 {
     if (input.is_pressed(Action::back) || input.is_pressed(Action::menu))
     {
+        if (development_options_ && input.is_pressed(Action::back))
+        {
+            development_options_ = false;
+            setting_focus_ = 6;
+            feedback.play(audio::Cue::back);
+            return;
+        }
         panel_ = false;
         feedback.play(audio::Cue::back);
         return;
@@ -3004,7 +3044,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         about_.handle(input, feedback);
         return;
     }
-    constexpr int kRows = 6;
+    const int kRows = development_options_ ? 3 : 7;
     if (step)
     {
         const int next = setting_focus_ + step;
@@ -3019,7 +3059,20 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
                                                                                         : 0;
     if (!turn)
         return;
-    if (setting_focus_ == 0)
+    const int setting = development_options_ ? setting_focus_ + 5
+                        : setting_focus_ < 5 ? setting_focus_
+                                             : setting_focus_ + 3;
+    if (setting == 9)
+    {
+        if (input.is_pressed(Action::confirm))
+        {
+            development_options_ = true;
+            setting_focus_ = 0;
+            feedback.play(audio::Cue::open);
+        }
+        return;
+    }
+    if (setting == 0)
     {
         if (locations_.size() < 2)
             return refuse(feedback, input.nav_repeat, static_cast<float>(turn), 0.0f);
@@ -3032,14 +3085,47 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         settings_.location =
             locations_[static_cast<std::size_t>((index + turn + count) % count)].first;
     }
-    else if (setting_focus_ == 1)
+    else if (setting == 1)
         settings_.check_updates = !settings_.check_updates;
-    else if (setting_focus_ == 2)
+    else if (setting == 2)
         settings_.sounds = !settings_.sounds;
-    else if (setting_focus_ == 3)
+    else if (setting == 3)
         settings_.vibration = !settings_.vibration;
-    else if (setting_focus_ == 4)
+    else if (setting == 4)
         settings_.reduce_motion = !settings_.reduce_motion;
+    else if (setting == 5)
+    {
+        if (input.is_pressed(Action::confirm))
+            pending_catalog_url = true;
+        return;
+    }
+    else if (setting == 6)
+    {
+        if (settings_.verify_signatures)
+        {
+            if (!input.is_pressed(Action::confirm))
+                return;
+            ask_ = Ask::disable_signatures;
+            dialog_.open({ui::StatusKind::question,
+                          "Disable catalog signature checks?",
+                          "Only do this for a feed you trust. Its publisher can choose which "
+                          "apps and updates you install. Download hashes are still checked, "
+                          "but they do not authenticate the publisher. Applies after reopening "
+                          "the store.",
+                          {{"Cancel"}, {"Disable checks", ui::ButtonKind::primary}}},
+                         feedback);
+            return;
+        }
+        settings_.verify_signatures = true;
+        notify("Catalog settings saved", "Signature checks will resume after reopening the store.");
+    }
+    else if (setting == 7)
+    {
+        if (!input.is_pressed(Action::confirm))
+            return;
+        settings_.verify_signatures = true;
+        set_catalog_url(catalog::kDefaultApi);
+    }
     else
     {
         // The store's own page says what can be done about its version.
@@ -3333,28 +3419,53 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             {6, "Vibration", "A light answer from the controller.", 1, "", settings_.vibration},
             {8, "Reduce motion", "Nothing drifts, floats or slides; things fade instead.", 1, "",
              settings_.reduce_motion},
+            {4, "Catalog API URL", "HTTPS API directory. Applies when the store next opens.", 3,
+             settings_.catalog_url, false},
+            {4, "Verify catalog signatures",
+             "Keep on for the official catalog. Applies next launch.", 1, "",
+             settings_.verify_signatures},
+            {4, "Restore official catalog",
+             "Restores homebrew.page and signature checks next launch.", 2, "Restore", false},
             {7, "ProsperoStore", "Its page updates it.", 2,
              restart_needed_ ? "Restart to finish"
              : newer         ? "Version " + self->available_version + " available"
                              : "Version " + self_version_ + (self ? ", up to date" : ""),
              newer || restart_needed_},
+            {1, "Development options", "Custom catalogs and signature verification.", 2, "Open",
+             false},
         };
         float y = panel.y + 32.0f;
-        for (int i = 0; i < 6; ++i)
+        if (development_options_)
         {
+            ui::text(list, fonts.display, "Development options", px, y + 40.0f, 36, kInk);
+            ui::text(list, fonts.regular,
+                     "Use your own feed for development. Changes apply next launch.", px, y + 78.0f,
+                     21, kInk.with_alpha(0.6f));
+            y += 112.0f;
+        }
+        const int first = std::max(0, setting_focus_ - 5);
+        const int count = development_options_ ? 3 : 7;
+        for (int focus = first; focus < std::min(first + 6, count); ++focus)
+        {
+            const int i = development_options_ ? focus + 5 : focus < 5 ? focus : focus + 3;
             const Rect row{px - 16.0f, y, pw + 32.0f, 108.0f};
-            if (i == setting_focus_)
+            if (focus == setting_focus_)
                 row_focus(row);
-            else if (i > 0)
+            else if (focus > first)
                 list.rounded_rect({px, y - 8.0f, pw, 1.0f}, 0, kInk.with_alpha(0.08f));
             list.circle(px + 28.0f, row.cy(), 28.0f, kInk.with_alpha(0.08f));
             sign(list, rows[i].sign, px + 28.0f, row.cy(), kInk.with_alpha(0.9f));
             ui::text(list, fonts.semibold, rows[i].label, px + 82.0f, row.y + 50.0f, 26, kInk);
-            ui::text(list, fonts.regular, rows[i].note, px + 82.0f, row.y + 84.0f, 20,
-                     kInk.with_alpha(0.6f));
+            ui::text(list, fonts.regular,
+                     rows[i].kind == 3 ? fonts.regular.font->fit(rows[i].value, 20, pw - 220.0f)
+                                       : rows[i].note,
+                     px + 82.0f, row.y + 84.0f, 20, kInk.with_alpha(0.6f));
             const float right = px + pw;
             if (rows[i].kind == 1)
                 toggle(list, right, row.cy(), rows[i].on);
+            else if (rows[i].kind == 3)
+                ui::text(list, fonts.semibold, "Edit", right - 16.0f, row.y + 50.0f, 24, kAccent,
+                         gfx::Align::right);
             else if (rows[i].kind == 0)
             {
                 // The place, the room there, and arrows: left and right choose.
@@ -3381,6 +3492,11 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
         }
         ui::text(list, fonts.regular, "Changes are saved as you make them.", kMargin, 640.0f, 20,
                  kInk.with_alpha(0.5f));
+        ui::text(list, fonts.regular, "Catalog changes apply next launch.", kMargin, 674.0f, 20,
+                 kInk.with_alpha(0.5f));
+        ui::text(list, fonts.regular,
+                 std::to_string(setting_focus_ + 1) + " / " + std::to_string(count), kMargin,
+                 716.0f, 20, kInk.with_alpha(0.5f));
     }
     else
     {
@@ -3392,8 +3508,10 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
         ui::text(list, fonts.display, "ProsperoStore", px + 150.0f, panel.y + 98.0f, 52, kInk);
         float words = ui::text(list, fonts.regular, "Apps from ", px + 152.0f, panel.y + 136.0f, 22,
                                kInk.with_alpha(0.62f));
-        ui::text(list, fonts.semibold, "homebrew.page", px + 152.0f + words, panel.y + 136.0f, 22,
-                 kAccent);
+        ui::text(list, fonts.semibold,
+                 active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page"
+                                                             : "your custom catalog",
+                 px + 152.0f + words, panel.y + 136.0f, 22, kAccent);
         words = ui::text(list, fonts.regular, "Brought to you by ", px + 152.0f, panel.y + 168.0f,
                          22, kInk.with_alpha(0.62f));
         ui::text(list, fonts.semibold, "BlackBearReloaded", px + 152.0f + words, panel.y + 168.0f,
@@ -3411,7 +3529,7 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
                               {ui::Button::circle, "Close"}};
     const ui::Hint change[] = {{ui::Button::cross, "Change"},
                                {ui::Button::l1, "Rooms", ui::Button::r1},
-                               {ui::Button::circle, "Close"}};
+                               {ui::Button::circle, development_options_ ? "Back" : "Close"}};
     const ui::Hint read[] = {{ui::Button::dpad, "Scroll"},
                              {ui::Button::l1, "Rooms", ui::Button::r1},
                              {ui::Button::circle, "Close"}};

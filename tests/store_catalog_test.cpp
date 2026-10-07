@@ -20,6 +20,20 @@ int main()
     assert(!update_available("1.000.000", "01.000.000"));
     assert(sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     assert(api_url("https://homebrew.page/api/v1/index.json"));
+    std::string base = "unchanged";
+    assert(normalize_api(" https://dev.example:8443/api/v1 ", base));
+    assert(base == "https://dev.example:8443/api/v1/");
+    assert(normalize_api("", base) && base == kDefaultApi);
+    for (const auto *bad :
+         {"http://dev.example/api/v1/", "file:///tmp/feed/", "https://user@dev.example/api/",
+          "https://dev.example:0/api/", "https://dev.example:65536/api/",
+          "https://dev.example:/api/", "https://dev.example/api/?q=x", "https://dev.example/api/#x",
+          "https://dev.example/api/\nverify_signatures=0"})
+    {
+        assert(!normalize_api(bad, base));
+        assert(base == kDefaultApi);
+    }
+    assert(!normalize_api("https://dev.example/" + std::string(512, 'a'), base));
     assert(artifact_url("https://github.com/owner/repo/releases/download/v1/a.zip"));
     assert(!artifact_url("https://release-assets.githubusercontent.com/a"));
     assert(artifact_url("https://release-assets.githubusercontent.com/a", true));
@@ -44,6 +58,8 @@ int main()
     assert(detail.large_icon == "https://homebrew.page/icons/PPSA99000.png");
     auto bad_icon = full_icon;
     bad_icon.replace(bad_icon.find("https://homebrew.page"), 21, "https://untrusted.example");
+    assert(parse_detail(bad_icon, "PPSA99000", detail, error)); // Custom HTTPS icon host.
+    bad_icon.replace(bad_icon.find("https://"), 8, "http://");
     assert(!parse_detail(bad_icon, "PPSA99000", detail, error));
     std::map<std::string, std::string> versions;
     assert(parse_versions(R"({"schema":3,"apps":{"PPSA99000":{"content_version":null}}})", versions,

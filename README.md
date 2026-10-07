@@ -13,7 +13,7 @@
 </p>
 
 > [!TIP]
-> **Every app in ProsperoStore comes from [homebrew.page](https://homebrew.page)**, the community
+> **By default, ProsperoStore uses [homebrew.page](https://homebrew.page)**, the community
 > catalog of PS5 homebrew. Browse it on the web at **[homebrew.page](https://homebrew.page)**, then
 > install from the console with one button. The catalog is signed, and every download is checked
 > against it before anything touches your console.
@@ -130,6 +130,36 @@ before 1.000.020 show a short notice at the top right instead of the question.
 Updating from inside the store is the easy way. To update by hand, replace the `PPSA99000` folder
 with the one from the new release; if the console then says it can't start the app, see the note
 about permissions under [Install](#install).
+
+## Custom catalogs
+
+In **Settings → Development options**, select **Catalog API URL** and enter the HTTPS directory
+containing the feed, for example `https://example.com/api/v1/`. Enter the API
+directory, not the website homepage, a GitHub repository URL, or `index.json`.
+Changes are saved and apply when you close and reopen ProsperoStore.
+**Restore official catalog** restores `https://homebrew.page/api/v1/` and turns
+signature checks back on. Clearing the URL also restores the default address.
+
+**Verify catalog signatures** is on by default and uses the official catalog's
+built-in public keys. This supports mirrors of the signed official feed. For
+an independently published development feed, you can turn it off after confirming
+the warning. The store then labels the catalog **Signatures not checked**.
+Only use this with a publisher you trust: hashes detect changed downloads, but
+an unchecked publisher controls both the download address and its expected hash.
+
+Custom feeds must implement the [catalog API](https://github.com/blackbearreloaded/ps5-homebrew-catalog/blob/main/docs/api.md):
+schema-3 `manifest.json`, `index.json`, `versions.json`, and `apps/<TITLEID>.json`.
+The manifest must list the SHA-256 of each API JSON file. `manifest.sig` is required
+only while signature verification is on. API-file hashes, artifact hashes, ZIP
+validation, HTTPS certificate checks, and the existing GitHub release download
+policy remain enforced. Plain HTTP, self-signed TLS certificates, arbitrary JSON
+lists, and downloads from non-GitHub artifact hosts are not supported.
+
+Each API URL and signature mode has its own catalog cache. Re-enabling verification
+never reuses an unchecked catalog; the official signed catalog retains its saved
+rollback protection. Signature checks off also disables sequence rollback checks,
+so development feeds can rebuild with a lower sequence. Store update notices use
+the selected catalog, and app QR codes use its `page` URLs.
 
 ## Known limits of this version
 

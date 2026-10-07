@@ -23,10 +23,10 @@ struct Update
         icon,
         qr,
         inventory,
-        notice,    // message is its title, detail its body
+        notice,       // message is its title, detail its body
         store_update, // a newer ProsperoStore is listed: message is its version
-        job,       // a finished install, update or uninstall: entry.id, ok, message, detail
-        locations, // where apps can be installed on this console
+        job,          // a finished install, update or uninstall: entry.id, ok, message, detail
+        locations,    // where apps can be installed on this console
         error
     } kind = Kind::error;
     std::string detail;
@@ -65,6 +65,9 @@ class Service
     bool installer = false;
     // Set before start(): whether to ask the catalog for a newer store.
     bool check_updates = true;
+    // Captured at start; changes in Settings apply on the next launch.
+    std::string catalog_url = catalog::kDefaultApi;
+    bool verify_signatures = true;
     // Tests only: replaces the environment built from the console's configuration.
     std::optional<install::Environment> installer_environment;
     bool start();

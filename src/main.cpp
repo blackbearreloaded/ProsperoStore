@@ -231,6 +231,8 @@ int main()
             save::read_file(std::string(storage_root) + "/settings.txt", &saved, 4096);
         screen.set_settings(store::parse_settings(saved));
         service.check_updates = screen.settings().check_updates;
+        service.catalog_url = screen.settings().catalog_url;
+        service.verify_signatures = screen.settings().verify_signatures;
     }
 #ifdef STORE_INSTALLER
     service.installer = elevated;
@@ -319,13 +321,14 @@ int main()
     [[maybe_unused]] const char *note = "", *previous_note = "";
     [[maybe_unused]] std::int64_t tour_until = 0, tour_next = 0;
     [[maybe_unused]] unsigned tour_step = 0;
-    [[maybe_unused]] std::string press_keys;         // development: buttons still to press
+    [[maybe_unused]] std::string press_keys; // development: buttons still to press
     [[maybe_unused]] std::int64_t press_next = 0;
     [[maybe_unused]] bool shot_wanted = false;       // development: save the next frame
     [[maybe_unused]] std::string shot_name = "shot"; // ... as /data/prosperostore/dev/<name>.tga
     [[maybe_unused]] int bench_step = -1;
     ps5::Ime keyboard;
     bool keyboard_active = false;
+    bool keyboard_catalog = false;
     std::int64_t close_at = 0; // set when the store updates itself: close at this time
     while (!quit.load() && !screen.wants_quit() &&
            (close_at == 0 || sys::monotonic_us() < close_at))
@@ -763,12 +766,20 @@ int main()
             bench_step = bench_step == 23 ? -1 : bench_step + 1;
         }
 #endif
-        const bool keyboard_owns_input = keyboard_active || screen.pending_search;
-        if (screen.pending_search && !frame.is_held(Action::north))
+        const bool keyboard_owns_input =
+            keyboard_active || screen.pending_search || screen.pending_catalog_url;
+        if (!keyboard_active && ((screen.pending_search && !frame.is_held(Action::north)) ||
+                                 (screen.pending_catalog_url && !frame.is_held(Action::confirm))))
         {
+            keyboard_catalog = screen.pending_catalog_url;
             screen.pending_search = false;
-            keyboard_active =
-                keyboard.open("Search ProsperoStore", "App name or developer", screen.query());
+            screen.pending_catalog_url = false;
+            keyboard_active = keyboard_catalog
+                                  ? keyboard.open("Catalog API URL",
+                                                  "HTTPS API directory; empty restores default",
+                                                  screen.settings().catalog_url, 512)
+                                  : keyboard.open("Search ProsperoStore", "App name or developer",
+                                                  screen.query());
             sys::log("[STORE] keyboard open=%d", keyboard_active ? 1 : 0);
             if (!keyboard_active)
             {
@@ -780,7 +791,8 @@ int main()
                 sys::log("[STORE] keyboard refused: dialog=0x%08x module=0x%08x user=0x%08x id=%d",
                          static_cast<unsigned>(common), static_cast<unsigned>(module),
                          static_cast<unsigned>(foreground), user);
-                screen.set_status("The system keyboard could not open. Try Search again.");
+                screen.notify("Keyboard unavailable",
+                              "The system keyboard could not open. Please try again.");
                 feedback.play(audio::Cue::error);
             }
         }
@@ -788,9 +800,15 @@ int main()
         {
             const auto state = keyboard.poll();
             if (state == ps5::Ime::State::accepted)
-                screen.set_query(keyboard.text());
+            {
+                if (keyboard_catalog)
+                    screen.set_catalog_url(keyboard.text());
+                else
+                    screen.set_query(keyboard.text());
+            }
             else if (state == ps5::Ime::State::failed)
-                screen.set_status("The system keyboard closed unexpectedly. Try Search again.");
+                screen.notify("Keyboard closed",
+                              "The system keyboard closed unexpectedly. Please try again.");
             if (state != ps5::Ime::State::open)
                 sys::log("[STORE] keyboard closed state=%d", static_cast<int>(state));
             keyboard_active = state == ps5::Ime::State::open;

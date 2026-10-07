@@ -13,7 +13,6 @@ namespace store::catalog
 {
 namespace
 {
-constexpr const char *kApi = "https://homebrew.page/api/v1/";
 // open with O_NOFOLLOW also works where the sandbox prohibits lstat. Keep the
 // descriptor through validation and read so a path swap cannot replace it.
 int read_trust(const std::string &path, std::string &out)
@@ -82,7 +81,7 @@ bool Client::file(const Manifest &manifest, const std::string &name, std::size_t
         error = "The offline catalog is incomplete";
         return false;
     }
-    const auto response = net::fetch(kApi + name, net::Purpose::catalog, limit, body, *control);
+    const auto response = net::fetch(api_ + name, net::Purpose::catalog, limit, body, *control);
     if (!response.ok())
     {
         error = response.error;
@@ -97,25 +96,33 @@ bool Client::file(const Manifest &manifest, const std::string &name, std::size_t
     return error.empty();
 }
 
-bool Client::parse(const std::string &bundle, std::uint64_t highest, Snapshot &out,
-                   net::Control *control, std::string &error)
+bool Client::manifest(const std::string &bundle, std::uint64_t highest, Manifest &out,
+                      std::string &error) const
 {
     if (bundle.size() <= 64)
     {
         error = "No verified offline catalog";
         return false;
     }
+    const auto body = std::string_view(bundle).substr(64);
+    return verify_ ? verify_manifest(body, std::string_view(bundle).substr(0, 64), highest,
+                                     public_keys(), out, error)
+                   : parse_manifest(body, 0, out, error);
+}
+
+bool Client::parse(const std::string &bundle, std::uint64_t highest, Snapshot &out,
+                   net::Control *control, std::string &error)
+{
     Snapshot next;
-    if (!verify_manifest(std::string_view(bundle).substr(64),
-                         std::string_view(bundle).substr(0, 64), highest, public_keys(),
-                         next.manifest, error))
+    if (!manifest(bundle, highest, next.manifest, error))
         return false;
     std::string index, versions;
     if (!file(next.manifest, "index.json", kIndexLimit, index, control, error) ||
         !file(next.manifest, "versions.json", kVersionsLimit, versions, control, error) ||
         !parse_index(index, next.entries, error) || !parse_versions(versions, next.versions, error))
         return false;
-    next.verified = true;
+    next.verified = verify_;
+    next.accepted = true;
     next.online = control != nullptr;
     out = std::move(next);
     return true;
@@ -134,6 +141,12 @@ bool Client::cached(Snapshot &out, std::string &error)
 
 bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
 {
+    std::string normalized;
+    if (!normalize_api(api_, normalized) || normalized != api_)
+    {
+        error = "The catalog API URL is invalid";
+        return false;
+    }
     if (!cache_.empty() && !hui::save::ensure_directory(cache_))
     {
         error = "The catalog cache is unavailable";
@@ -153,9 +166,7 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
     {
         Manifest previous;
         std::string ignored;
-        if (current.size() <= 64 || !verify_manifest(std::string_view(current).substr(64),
-                                                     std::string_view(current).substr(0, 64),
-                                                     highest, public_keys(), previous, ignored))
+        if (!manifest(current, highest, previous, ignored))
         {
             error = "The saved catalog trust record is damaged";
             return false;
@@ -163,20 +174,24 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
         highest = previous.sequence;
     }
     std::string body, signature;
-    auto response = net::fetch(std::string(kApi) + "manifest.json", net::Purpose::catalog,
-                               kVersionsLimit, body, control);
+    auto response =
+        net::fetch(api_ + "manifest.json", net::Purpose::catalog, kVersionsLimit, body, control);
     if (!response.ok())
     {
         error = response.error;
         return false;
     }
-    response = net::fetch(std::string(kApi) + "manifest.sig", net::Purpose::catalog, 64, signature,
-                          control);
-    if (!response.ok())
+    if (verify_)
     {
-        error = response.error;
-        return false;
+        response = net::fetch(api_ + "manifest.sig", net::Purpose::catalog, 64, signature, control);
+        if (!response.ok())
+        {
+            error = response.error;
+            return false;
+        }
     }
+    else
+        signature.assign(64, '\0'); // Same bundle layout, isolated from every signed cache.
     Snapshot next;
     const std::string bundle = signature + body;
     if (!parse(bundle, highest, next, &control, error))
@@ -205,7 +220,7 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
 bool Client::detail(const Snapshot &snapshot, const std::string &id, Entry &out,
                     net::Control &control, std::string &error)
 {
-    if (!snapshot.verified || !title_id(id))
+    if (!snapshot.accepted || (verify_ && !snapshot.verified) || !title_id(id))
     {
         error = "The catalog is not verified";
         return false;

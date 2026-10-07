@@ -275,6 +275,49 @@ static void check_hold_to_uninstall()
     assert(!store::parse_settings("location=/data/homebrew\n").reduce_motion);
 }
 
+static void check_catalog_settings()
+{
+    using namespace store;
+    assert(parse_settings("").verify_signatures);
+    Settings settings;
+    settings.catalog_url = "https://dev.example/api/v1/";
+    settings.verify_signatures = false;
+    const auto saved = parse_settings(format_settings(settings));
+    assert(saved.catalog_url == settings.catalog_url && !saved.verify_signatures);
+    assert(parse_settings("catalog_url=http://bad/\nverify_signatures=oops\n").verify_signatures);
+    assert(parse_settings("catalog_url=http://bad/\n").catalog_url == catalog::kDefaultApi);
+    Screen screen;
+    screen.open_panel(1);
+    hui::ui::Feedback feedback;
+    hui::InputFrame down, confirm, back, right;
+    down.nav = hui::Direction::down;
+    right.nav = hui::Direction::right;
+    confirm.pressed = hui::action_bit(hui::Action::confirm);
+    back.pressed = hui::action_bit(hui::Action::back);
+    for (int i = 0; i < 6; ++i)
+        screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback); // Development options.
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.pending_catalog_url);
+    screen.pending_catalog_url = false;
+    screen.set_catalog_url("https://dev.example/api/v1");
+    assert(screen.settings().catalog_url == settings.catalog_url && screen.settings_changed);
+    screen.set_catalog_url("http://bad/");
+    assert(screen.settings().catalog_url == settings.catalog_url);
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().verify_signatures); // Opening the question is not consent.
+    screen.update(back, 0.016f, feedback);
+    assert(screen.settings().verify_signatures);
+    screen.update(confirm, 0.016f, feedback);
+    screen.update(right, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(!screen.settings().verify_signatures);
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().verify_signatures && screen.settings().catalog_url == catalog::kDefaultApi);
+}
+
 int main(int argc, char **argv)
 {
     check_artwork_requests();
@@ -282,6 +325,7 @@ int main(int argc, char **argv)
     check_installed_sections();
     check_hold_to_uninstall();
     check_keyboard_keys();
+    check_catalog_settings();
     if (argc < 3 || argc > 5)
         return 2;
     const auto get_display = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
@@ -312,6 +356,22 @@ int main(int argc, char **argv)
         if (!renderer.init() || !fonts.load(renderer, argv[1]) || !target.create(1920, 1080, 1))
             return 5;
         store::Screen screen;
+        // Settings previews do not need a live catalog or cached downloads.
+        if (argc == 4 && (std::string(argv[3]) == "settings" || std::string(argv[3]) == "catalog-settings"))
+        {
+            screen.open_panel(1);
+            hui::ui::Feedback quiet;
+            hui::InputFrame down;
+            down.nav = hui::Direction::down;
+            if (std::string(argv[3]) == "catalog-settings")
+            {
+                for (int i = 0; i < 6; ++i)
+                    screen.update(down, 0.016f, quiet);
+                hui::InputFrame confirm;
+                confirm.pressed = hui::action_bit(hui::Action::confirm);
+                screen.update(confirm, 0.016f, quiet);
+            }
+        }
         std::vector<GLuint> textures;
         {
             std::string encoded;
@@ -324,7 +384,7 @@ int main(int argc, char **argv)
                 screen.set_coming_soon_art(textures.back());
             }
         }
-        if (argc >= 4)
+        if (argc >= 4 && std::string(argv[3]) != "settings" && std::string(argv[3]) != "catalog-settings")
         {
             store::catalog::Client catalog(argv[3]);
             store::catalog::Snapshot snapshot;
