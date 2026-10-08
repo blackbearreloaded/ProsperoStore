@@ -289,33 +289,65 @@ static void check_catalog_settings()
     Screen screen;
     screen.open_panel(1);
     hui::ui::Feedback feedback;
-    hui::InputFrame down, confirm, back, right;
+    hui::InputFrame down, up, confirm, back, right;
     down.nav = hui::Direction::down;
+    up.nav = hui::Direction::up;
     right.nav = hui::Direction::right;
     confirm.pressed = hui::action_bit(hui::Action::confirm);
     back.pressed = hui::action_bit(hui::Action::back);
     for (int i = 0; i < 6; ++i)
         screen.update(down, 0.016f, feedback);
-    screen.update(confirm, 0.016f, feedback); // Development options.
+    screen.update(confirm, 0.016f, feedback); // Development options: Official catalog.
+    // The official catalog can't go while no custom one is in use.
     screen.update(confirm, 0.016f, feedback);
-    assert(screen.pending_catalog_url);
+    assert(screen.settings().use_official && !screen.settings().use_custom);
+    // Custom catalog on: with no address yet, the store asks for one.
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().use_custom && screen.pending_catalog_url);
+    assert(screen.settings().use_official); // not active yet: the official one stays
     screen.pending_catalog_url = false;
     screen.set_catalog_url("https://dev.example/api/v1");
     assert(screen.settings().catalog_url == settings.catalog_url && screen.settings_changed);
     screen.set_catalog_url("http://bad/");
     assert(screen.settings().catalog_url == settings.catalog_url);
+    assert(screen.settings().custom_active() && screen.settings().use_official); // both
+    // Now the official catalog can be switched off (custom only), and on again.
+    screen.update(up, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(!screen.settings().use_official);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().use_official);
+    // The address row asks again.
+    screen.update(down, 0.016f, feedback);
     screen.update(down, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback);
-    assert(screen.settings().verify_signatures); // Opening the question is not consent.
+    assert(screen.pending_catalog_url);
+    screen.pending_catalog_url = false;
+    // Signature checks: asking is not consent.
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().verify_signatures);
     screen.update(back, 0.016f, feedback);
     assert(screen.settings().verify_signatures);
     screen.update(confirm, 0.016f, feedback);
     screen.update(right, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback);
     assert(!screen.settings().verify_signatures);
+    // Restore: the official catalog alone, checked.
     screen.update(down, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback);
     assert(screen.settings().verify_signatures && screen.settings().catalog_url == catalog::kDefaultApi);
+    assert(screen.settings().use_official && !screen.settings().use_custom);
+    // The two switches survive the settings file, and a file can't switch both off.
+    Settings both;
+    both.catalog_url = "https://dev.example/api/v1/";
+    both.use_custom = true;
+    both.use_official = false;
+    const auto kept = parse_settings(format_settings(both));
+    assert(kept.use_custom && !kept.use_official && kept.custom_active());
+    assert(parse_settings("use_official=0\nuse_custom=0\n").use_official);
+    assert(parse_settings("use_official=0\nuse_custom=1\n").use_official); // no address: not active
 }
 
 int main(int argc, char **argv)
