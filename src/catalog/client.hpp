@@ -34,5 +34,7 @@ class Client
     bool parse(const std::string &bundle, std::uint64_t highest, Snapshot &out,
                net::Control *control, std::string &error);
     std::string cache_;
+    // The place that last answered with files that verified: asked first for the next file.
+    std::size_t origin_ = 0;
 };
 } // namespace store::catalog
