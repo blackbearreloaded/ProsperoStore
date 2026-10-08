@@ -42,6 +42,27 @@ int main()
         R"({"schema":3,"titleid":"PPSA99000","name":"Store","kind":"app","status":"coming_soon","icon":"https://homebrew.page/icons/PPSA99000.png"})";
     assert(parse_detail(full_icon, "PPSA99000", detail, error));
     assert(detail.large_icon == "https://homebrew.page/icons/PPSA99000.png");
+    // Safety facts: read when present, ignored when unknown, never a reason to refuse an app.
+    assert(detail.sandbox.empty() && detail.build.empty() && detail.helpers == 0);
+    const std::string with_safety =
+        R"({"schema":3,"titleid":"PPSA99000","name":"Store","kind":"app","status":"coming_soon","safety":{"sandbox":"leaves","routes":["payload"],"helpers":3,"helpers_unapproved":1,"network":true,"build":"attested","build_workflow":"o/r/.github/workflows/x.yml@refs/tags/v1","future":1}})";
+    Entry scanned;
+    assert(parse_detail(with_safety, "PPSA99000", scanned, error));
+    assert(scanned.sandbox == "leaves" && scanned.build == "attested");
+    assert(scanned.helpers == 3 && scanned.helpers_unapproved == 1);
+    const std::string odd_safety =
+        R"({"schema":3,"titleid":"PPSA99000","name":"Store","kind":"app","status":"coming_soon","safety":{"sandbox":"safe","build":7,"helpers":-1,"helpers_unapproved":99999999}})";
+    assert(parse_detail(odd_safety, "PPSA99000", scanned, error));
+    assert(scanned.sandbox.empty() && scanned.build.empty());
+    assert(scanned.helpers == 0 && scanned.helpers_unapproved == 0);
+    assert(parse_detail(
+        R"({"schema":3,"titleid":"PPSA99000","name":"Store","kind":"app","status":"coming_soon","safety":"no"})",
+        "PPSA99000", scanned, error));
+    const std::string listed =
+        R"({"schema":3,"apps":[{"titleid":"PPSA99001","name":"A","kind":"app","status":"coming_soon","sandbox":"stays"},{"titleid":"PPSA99002","name":"B","kind":"app","status":"coming_soon","sandbox":null}]})";
+    std::vector<Entry> labelled;
+    assert(parse_index(listed, labelled, error) && labelled.size() == 2);
+    assert(labelled[0].sandbox == "stays" && labelled[1].sandbox.empty());
     auto bad_icon = full_icon;
     bad_icon.replace(bad_icon.find("https://homebrew.page"), 21, "https://untrusted.example");
     assert(!parse_detail(bad_icon, "PPSA99000", detail, error));

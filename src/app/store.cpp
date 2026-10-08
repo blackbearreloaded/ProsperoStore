@@ -621,6 +621,42 @@ void Screen::refresh_detail()
             blocks.push_back(Block::heading("What's new", 3));
             blocks.push_back(Block::paragraph(entry.release_notes));
         }
+        // What the catalog's scan found, in words. It is advice: say what was found, not "safe".
+        if (!entry.sandbox.empty())
+        {
+            blocks.push_back(Block::heading("Safety", 3));
+            if (entry.sandbox == "stays")
+                blocks.push_back(Block::paragraph(
+                    "The catalog's scan found no way for this app to reach beyond its own files."));
+            else if (entry.sandbox == "leaves")
+                blocks.push_back(Block::paragraph(
+                    "This app can get full access to the console, usually to read and write files "
+                    "outside its own folder. Install it only if you trust its developer."));
+            else
+                blocks.push_back(Block::paragraph("The catalog's scan could not tell whether this "
+                                                  "app reaches beyond its own files."));
+            if (entry.helpers_unapproved > 0)
+                blocks.push_back(Block::paragraph(
+                    std::to_string(entry.helpers_unapproved) + " of its " +
+                    std::to_string(entry.helpers) +
+                    " helper program(s) that run outside the sandbox have not been reviewed by the "
+                    "catalog's maintainers."));
+            else if (entry.helpers > 0)
+                blocks.push_back(Block::paragraph("Its " + std::to_string(entry.helpers) +
+                                                  " helper program(s) that run outside the sandbox "
+                                                  "are on the catalog's reviewed list."));
+            if (entry.build == "attested")
+                blocks.push_back(Block::paragraph(
+                    "Built by GitHub Actions: a signed statement ties this file to its source."));
+            else if (entry.build == "workflow")
+                blocks.push_back(Block::paragraph("Released by a workflow of its repository. "
+                                                  "Nothing proves where it was built."));
+            else if (entry.build == "developer")
+                blocks.push_back(Block::paragraph("Built and uploaded by its developer. Nothing "
+                                                  "ties this file to the published source."));
+            blocks.push_back(Block::paragraph("From an automatic scan that reads the file and "
+                                              "never runs it. It can miss things."));
+        }
         if (!entry.source.empty())
         {
             blocks.push_back(Block::heading("Source", 3));
@@ -2566,6 +2602,9 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
         if (word.empty())
             return;
         const float width = fonts.semibold.measure(word, 20) + 36.0f;
+        if (cx + width >
+            kInfoX + kInfoW) // a chip that doesn't fit is left out; the article says it
+            return;
         list.bordered_rect({cx, 532.0f, width, 42.0f}, 21, kInk.with_alpha(0.08f), 1.5f,
                            kInk.with_alpha(0.22f));
         ui::text(list, fonts.semibold, word, cx + width * 0.5f, centred(553.0f, 20), 20,
@@ -2578,6 +2617,9 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
         chip(app.detail->size ? size_text(app.detail->size) : std::string());
         chip(app.detail->license);
         chip(app.detail->format.empty() ? std::string() : ui::upper(app.detail->format));
+        chip(app.detail->sandbox == "stays"    ? std::string("Stays in sandbox")
+             : app.detail->sandbox == "leaves" ? std::string("Leaves sandbox")
+                                               : std::string());
     }
     ui::Canvas canvas{list, fonts, glass, time_};
     article_.draw(canvas);

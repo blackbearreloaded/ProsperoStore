@@ -32,6 +32,12 @@ struct Entry
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
     std::uint64_t size = 0;
+    // What the catalog's scan of the release file found. Advice, not a guarantee: the scan reads
+    // the file and can miss things. Empty strings mean "not known", never "stays".
+    std::string sandbox;       // "stays", "leaves", "unclear"
+    std::string build;         // "attested", "workflow", "developer"
+    std::uint32_t helpers = 0; // helper programs that run outside the sandbox
+    std::uint32_t helpers_unapproved = 0;
 };
 
 struct Manifest

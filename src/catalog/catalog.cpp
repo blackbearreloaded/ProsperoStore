@@ -83,6 +83,28 @@ bool field(yyjson_val *object, const char *key, std::string &out, std::size_t li
     return out.find('\0') == std::string::npos && (!required || !out.empty());
 }
 
+// One of the values this version knows, or nothing: a word from a newer catalog is not an error.
+std::string known_word(yyjson_val *object, const char *key,
+                       std::initializer_list<std::string_view> words)
+{
+    auto *value = yyjson_obj_get(object, key);
+    if (!value || !yyjson_is_str(value))
+        return {};
+    const std::string_view word{yyjson_get_str(value), yyjson_get_len(value)};
+    for (const auto known : words)
+        if (word == known)
+            return std::string{word};
+    return {};
+}
+
+std::uint32_t small_count(yyjson_val *object, const char *key)
+{
+    auto *value = yyjson_obj_get(object, key);
+    return value && yyjson_is_uint(value) && yyjson_get_uint(value) <= 1000
+               ? static_cast<std::uint32_t>(yyjson_get_uint(value))
+               : 0;
+}
+
 bool read_entry(yyjson_val *value, Entry &entry, bool detail)
 {
     if (!yyjson_is_obj(value) || !field(value, "titleid", entry.id, 9, true) ||
@@ -112,8 +134,18 @@ bool read_entry(yyjson_val *value, Entry &entry, bool detail)
             return false;
         entry.size = yyjson_get_uint(size);
     }
+    entry.sandbox = known_word(value, "sandbox", {"stays", "leaves", "unclear"});
     if (!detail)
         return true;
+    // The safety facts are advice shown beside the app; a shape this version doesn't know is
+    // ignored, never a reason to refuse the app's details.
+    if (auto *safety = yyjson_obj_get(value, "safety"); safety && yyjson_is_obj(safety))
+    {
+        entry.sandbox = known_word(safety, "sandbox", {"stays", "leaves", "unclear"});
+        entry.build = known_word(safety, "build", {"attested", "workflow", "developer"});
+        entry.helpers = small_count(safety, "helpers");
+        entry.helpers_unapproved = small_count(safety, "helpers_unapproved");
+    }
     if (!field(value, "description", entry.description, 32768) ||
         !field(value, "license", entry.license, 256) ||
         !field(value, "source_repo", entry.source, 1024) ||
