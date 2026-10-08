@@ -70,6 +70,9 @@ struct Settings
     bool sounds = true;
     bool vibration = true;
     bool reduce_motion = false; // no drifting, floating or sliding: things fade instead
+    // Records what the store does at each step, for a report: shown in About, written to
+    // /data/prosperostore/debug-trace.txt (or a USB drive) and the kernel log.
+    bool debug_log = false;
     std::string catalog_url = catalog::kDefaultApi;
     // The two sources, each switched on or off by itself in Development options. Both on:
     // the custom catalog's apps are added to homebrew.page's. Never both off.
@@ -155,6 +158,8 @@ class Screen
         debug_file_ = std::move(file);
         write_about();
     }
+    // What to check in ShadowMountPlus's settings: a notice now, the whole list in About.
+    void set_setup_notes(std::vector<std::string> notes);
     void set_self(std::string id, std::string version)
     {
         self_id_ = std::move(id);
@@ -313,6 +318,7 @@ class Screen
     void draw_panel(const hui::ui::Fonts &fonts, std::uint32_t glass);
     void write_about();
     std::vector<std::string> debug_lines_;
+    std::vector<std::string> setup_notes_;
     std::string debug_file_;
     const App *self_app() const;
     std::string time_left() const;

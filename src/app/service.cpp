@@ -146,8 +146,13 @@ void *Service::entry(void *self)
 
 // What ShadowMountPlus scans on this console, from its own configuration.
 // An existing configuration that can't be read is never replaced by defaults.
-bool Service::load_policy(system::ScanPolicy &out) const
+bool Service::load_policy(system::ScanPolicy &out, std::vector<std::string> *notes) const
 {
+    const auto note = [&](std::string text)
+    {
+        if (notes)
+            notes->push_back(std::move(text));
+    };
     if (installer_environment)
     {
         out = installer_environment->policy;
@@ -175,6 +180,8 @@ bool Service::load_policy(system::ScanPolicy &out) const
 #ifdef STORE_DEBUG_TRACE
         diag::trace("ShadowMountPlus settings: config.ini or manual.lst exists but can't be read");
 #endif
+        note("config.ini or manual.lst in /data/shadowmount exists but can't be read, so "
+             "installing is off. Check the file's permissions.");
         return false;
     }
     if (!system::scan_policy(configuration, manual, policy, policy_error))
@@ -183,6 +190,8 @@ bool Service::load_policy(system::ScanPolicy &out) const
 #ifdef STORE_DEBUG_TRACE
         diag::trace("ShadowMountPlus settings refused: %s", policy_error.c_str());
 #endif
+        note("ShadowMountPlus's settings can't be used, so installing is off: " + policy_error +
+             ".");
         return false;
     }
     hui::sys::log("[STORE] storage config=%d manual=%d roots=%zu entries=%zu depth=%u", configured,
@@ -203,8 +212,30 @@ bool Service::load_policy(system::ScanPolicy &out) const
                     policy.roots.size(), roots.empty() ? "none" : roots.c_str(),
                     policy.manual.size(), manual_entries.empty() ? "" : ": ",
                     manual_entries.c_str());
+        for (const auto &line : policy.ignored)
+            diag::trace("ShadowMountPlus settings: left out, not a path the store can read: %s",
+                        line.c_str());
     }
 #endif
+    // What the store did about lines it can't use, and what the user may want to fix.
+    for (const auto &line : policy.ignored)
+        note("Left out, not a full path: " + line + ". Write it like /data/homebrew.");
+    if (policy.fell_back)
+        note("None of your scan paths could be read, so ShadowMountPlus's default folders "
+             "are used (/data/homebrew and the homebrew folder on each drive).");
+    for (const auto &entry : policy.manual)
+    {
+        // A manual entry is one game folder or one image. A folder of apps there does
+        // nothing in ShadowMountPlus: it belongs in config.ini as scanpath=.
+        struct stat info
+        {
+        };
+        if (stat(entry.c_str(), &info) == 0 && S_ISDIR(info.st_mode) &&
+            stat((entry + "/sce_sys/param.json").c_str(), &info) != 0)
+            note("manual.lst lists " + entry +
+                 ", which is a folder and not one game. For a "
+                 "folder of apps use scanpath= in config.ini.");
+    }
     out = std::move(policy);
     return true;
 }
@@ -381,7 +412,8 @@ void Service::run_installer()
     std::string broken;
     if (environment.root.empty() || !hui::save::ensure_directory(environment.root) ||
         (!installer_environment && !load_policy(environment.policy)))
-        broken = "Installing is unavailable: the install locations couldn't be read";
+        broken = "Installing is unavailable: ShadowMountPlus's settings couldn't be read. "
+                 "About says what to check.";
     const auto rescan = [&]
     {
         Update installed;
@@ -609,7 +641,16 @@ void Service::run()
         return additive ? catalog::with_extra(official, extra, &clashes) : official;
     };
     system::ScanPolicy scan_policy;
-    const bool can_scan = load_policy(scan_policy);
+    std::vector<std::string> setup_notes;
+    const bool can_scan = load_policy(scan_policy, &setup_notes);
+    if (!setup_notes.empty())
+    {
+        Update setup;
+        setup.kind = Update::Kind::setup;
+        for (const auto &line : setup_notes)
+            setup.detail += line + "\n";
+        publish(std::move(setup));
+    }
 #ifdef STORE_DEVELOPMENT
     for (const auto &path : scan_policy.roots)
     {

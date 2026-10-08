@@ -295,7 +295,7 @@ static void check_catalog_settings()
     right.nav = hui::Direction::right;
     confirm.pressed = hui::action_bit(hui::Action::confirm);
     back.pressed = hui::action_bit(hui::Action::back);
-    for (int i = 0; i < 6; ++i)
+    for (int i = 0; i < 7; ++i)
         screen.update(down, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback); // Development options: Official catalog.
     // The official catalog can't go while no custom one is in use.
@@ -397,7 +397,7 @@ int main(int argc, char **argv)
             down.nav = hui::Direction::down;
             if (std::string(argv[3]) == "catalog-settings")
             {
-                for (int i = 0; i < 6; ++i)
+                for (int i = 0; i < 7; ++i)
                     screen.update(down, 0.016f, quiet);
                 hui::InputFrame confirm;
                 confirm.pressed = hui::action_bit(hui::Action::confirm);

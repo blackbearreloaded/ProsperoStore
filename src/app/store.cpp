@@ -233,6 +233,20 @@ void Screen::notify(std::string title, std::string body)
     toasts_.push(ui::StatusKind::info, std::move(title), std::move(body), 10.0f);
 }
 
+void Screen::set_setup_notes(std::vector<std::string> notes)
+{
+    setup_notes_ = std::move(notes);
+    write_about();
+    if (setup_notes_.empty())
+        return;
+    const auto more = setup_notes_.size() - 1;
+    toasts_.push(ui::StatusKind::warning, "Check your ShadowMountPlus settings",
+                 more == 0 ? "Press Options and open About to see what the store found."
+                           : std::to_string(setup_notes_.size()) +
+                                 " things to check: press Options and open About.",
+                 12.0f);
+}
+
 void Screen::offer_store_update(std::string version)
 {
     if (store_offer_ != StoreOffer::none)
@@ -2904,7 +2918,7 @@ std::string format_settings(const Settings &settings)
            "\nsounds=" + (settings.sounds ? "1" : "0") +
            "\nvibration=" + (settings.vibration ? "1" : "0") +
            "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") +
-           "\ncatalog_url=" + settings.catalog_url +
+           "\ndebug=" + (settings.debug_log ? "1" : "0") + "\ncatalog_url=" + settings.catalog_url +
            "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") +
            "\nuse_official=" + (settings.use_official ? "1" : "0") +
            "\nuse_custom=" + (settings.use_custom ? "1" : "0") + "\n";
@@ -2932,6 +2946,8 @@ Settings parse_settings(std::string_view text)
             settings.vibration = value != "0";
         else if (key == "motion")
             settings.reduce_motion = value == "reduced";
+        else if (key == "debug")
+            settings.debug_log = value == "1";
         else if (key == "catalog_url")
             catalog::normalize_api(value, settings.catalog_url);
         else if (key == "verify_signatures")
@@ -2994,6 +3010,16 @@ void Screen::write_about()
 {
     using Block = ui::TextBlock;
     std::vector<Block> blocks;
+    if (!setup_notes_.empty())
+    {
+        // What the store found in /data/shadowmount and what it did about it.
+        blocks.push_back(Block::heading("ShadowMountPlus settings to check", 3));
+        blocks.push_back(Block::paragraph(
+            "Found in /data/shadowmount/config.ini and manual.lst. The store keeps working "
+            "where it says so; fixing the lines removes this note."));
+        for (const auto &line : setup_notes_)
+            blocks.push_back(Block::bullet(line));
+    }
     if (!debug_lines_.empty())
     {
         // The debug build: what happened at each step, to photograph or send.
@@ -3098,7 +3124,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         about_.handle(input, feedback);
         return;
     }
-    const int kRows = development_options_ ? 5 : 7;
+    const int kRows = development_options_ ? 5 : 8;
     if (step)
     {
         const int next = setting_focus_ + step;
@@ -3113,10 +3139,17 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
                                                                                         : 0;
     if (!turn)
         return;
-    const int setting = development_options_ ? setting_focus_ + 5
-                        : setting_focus_ < 5 ? setting_focus_
-                                             : setting_focus_ + 5;
-    if (setting == 11)
+    const int setting = development_options_  ? setting_focus_ + 5
+                        : setting_focus_ < 5  ? setting_focus_
+                        : setting_focus_ == 5 ? 12
+                                              : setting_focus_ + 4;
+    if (setting == 12)
+    {
+        settings_.debug_log = !settings_.debug_log;
+        if (settings_.debug_log)
+            notify("Debug log is on", "Reopen the store, repeat the problem, then open About.");
+    }
+    else if (setting == 11)
     {
         if (input.is_pressed(Action::confirm))
         {
@@ -3519,6 +3552,8 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
              newer || restart_needed_},
             {1, "Development options", "Custom catalogs and signature verification.", 2, "Open",
              false},
+            {4, "Debug log", "Records every step for a report: see About, or debug-trace.txt.", 1,
+             "", settings_.debug_log},
         };
         float y = panel.y + 32.0f;
         if (development_options_)
@@ -3530,10 +3565,13 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             y += 112.0f;
         }
         const int first = std::max(0, setting_focus_ - 5);
-        const int count = development_options_ ? 5 : 7;
+        const int count = development_options_ ? 5 : 8;
         for (int focus = first; focus < std::min(first + 6, count); ++focus)
         {
-            const int i = development_options_ ? focus + 5 : focus < 5 ? focus : focus + 5;
+            const int i = development_options_ ? focus + 5
+                          : focus < 5          ? focus
+                          : focus == 5         ? 12
+                                               : focus + 4;
             const Rect row{px - 16.0f, y, pw + 32.0f, 108.0f};
             if (focus == setting_focus_)
                 row_focus(row);
@@ -3574,7 +3612,7 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
                      right - fonts.semibold.measure(rows[i].value, 40.0f * 0.58f) - 36.0f, row.cy(),
                      40.0f, rows[i].on ? kAccent : kInk.with_alpha(0.12f),
                      rows[i].on ? kOnAccent : kInk, 1.0f, kAllLayers);
-            y += 120.0f;
+            y += 106.0f;
         }
         ui::text(list, fonts.regular, "Changes are saved as you make them.", kMargin, 640.0f, 20,
                  kInk.with_alpha(0.5f));

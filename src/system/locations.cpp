@@ -67,6 +67,21 @@ bool clean_absolute_path(std::string_view path)
     return false;
 }
 
+// A path as people write it in the configuration, made plain where that is safe: quotes
+// around it are dropped and doubled slashes become one.
+std::string tidy_path(std::string_view value)
+{
+    value = trim(value);
+    if (value.size() >= 2 && (value.front() == '"' || value.front() == '\'') &&
+        value.back() == value.front())
+        value = trim(value.substr(1, value.size() - 2));
+    std::string out;
+    for (const char c : value)
+        if (!(c == '/' && !out.empty() && out.back() == '/'))
+            out.push_back(c);
+    return out;
+}
+
 bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &out,
                  std::string &error)
 {
@@ -78,6 +93,7 @@ bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &o
     }
     ScanPolicy candidate;
     bool recursive = false;
+    unsigned scan_lines = 0;
     while (!config.empty())
     {
         const auto newline = config.find('\n');
@@ -98,10 +114,13 @@ bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &o
         value = trim(value.substr(0, value.find_first_of("#;")));
         if (value.empty())
             continue;
-        if (key == "scanpath" && !add(candidate.roots, value))
+        // One scan path the store can't read must not switch installing off: it is left
+        // out and named in the debug log. The others still say where apps may go.
+        if (key == "scanpath")
         {
-            error = "A ShadowMount scan path cannot be interpreted safely";
-            return false;
+            ++scan_lines;
+            if (!add(candidate.roots, tidy_path(value)))
+                candidate.ignored.push_back("scanpath=" + std::string(value.substr(0, 200)));
         }
         if (key == "scan_depth")
         {
@@ -121,6 +140,10 @@ bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &o
     }
     if (recursive)
         candidate.depth = 2;
+    // Scan paths were set and none could be read: the store goes on with the built-in
+    // folders, which is where ShadowMountPlus looks when it has no usable path either, and
+    // says so. Refusing every install helped nobody.
+    candidate.fell_back = scan_lines != 0 && candidate.roots.empty();
     if (candidate.roots.empty())
     {
         candidate.roots = {"/data/homebrew", "/data/etaHEN/games"};
@@ -144,11 +167,10 @@ bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &o
         const auto newline = manual.find('\n');
         const auto line = trim(manual.substr(0, newline));
         manual = newline == manual.npos ? std::string_view{} : manual.substr(newline + 1);
-        if (!line.empty() && line.front() != '#' && !add(candidate.manual, line))
-        {
-            error = "A ShadowMount manual path cannot be interpreted safely";
-            return false;
-        }
+        // A manual entry is one game or image, not a scanned place: one the store can't
+        // read is left out.
+        if (!line.empty() && line.front() != '#' && !add(candidate.manual, tidy_path(line)))
+            candidate.ignored.push_back("manual.lst: " + std::string(line.substr(0, 200)));
     }
     out = std::move(candidate);
     error.clear();

@@ -11,6 +11,12 @@ namespace store::diag
 // log and is appended to the trace file, wherever one could be written: the store's
 // folder in /data when it has access, else the first USB drive that takes it.
 void trace(const char *format, ...) __attribute__((format(printf, 1, 2)));
+// The "Debug log" setting. Off (the default): lines are only kept in memory, a few hundred
+// at most, and nothing is written. Turning it on writes what was kept so far and every
+// later line to the kernel log and the trace file. The slow checks (trace_console,
+// curl_probe) are for the caller to run only while it is on.
+void set_enabled(bool on);
+bool enabled();
 // The lines so far, for the About room.
 std::vector<std::string> trace_lines();
 // Where the trace file is being written ("" when nowhere could be written).

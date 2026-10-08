@@ -132,21 +132,48 @@ Updating from inside the store is the easy way. To update by hand, replace the `
 with the one from the new release; if the console then says it can't start the app, see the note
 about permissions under [Install](#install).
 
+## Reporting a problem
+
+If the store shows no apps, stays offline or can't install something, switch on **Debug log** in
+**Settings** (Options button), close the store and open it again, and repeat what failed. The
+store then records each step it takes: the access it was given, the network requests, the
+catalog and every install.
+
+Send one of these with your report:
+
+- a photo of **About**, where the **Debug trace** section lists the steps (scroll for all of it);
+- the file `/data/prosperostore/debug-trace.txt`, fetched by FTP;
+- if the store couldn't write to `/data`: `ProsperoStore-debug-trace.txt` on a USB drive that was
+  plugged in before the store was opened.
+
+Say which console and firmware you have, your ShadowMountPlus version and your payload loader.
+The log holds no account details or passwords. Switch **Debug log** off again afterwards: while
+it is on, the store starts a little slower.
+
 ## Custom catalogs
 
-In **Settings → Development options**, select **Catalog API URL** and enter the HTTPS directory
-containing the feed, for example `https://example.com/api/v1/`. Enter the API
-directory, not the website homepage, a GitHub repository URL, or `index.json`.
-Changes are saved and apply when you close and reopen ProsperoStore.
-**Restore official catalog** restores `https://homebrew.page/api/v1/` and turns
-signature checks back on. Clearing the URL also restores the default address.
+**Settings → Development options** has two switches, one for each source:
 
-**Verify catalog signatures** is on by default and uses the official catalog's
-built-in public keys. This supports mirrors of the signed official feed. For
-an independently published development feed, you can turn it off after confirming
-the warning. The store then labels the catalog **Signatures not checked**.
-Only use this with a publisher you trust: hashes detect changed downloads, but
-an unchecked publisher controls both the download address and its expected hash.
+- **Official catalog** - homebrew.page, always signature-checked. On by default.
+- **Custom catalog** - your own feed. Switching it on asks for its address when none is set.
+
+With both on, the custom catalog's apps are added to homebrew.page's and carry a "Custom catalog"
+mark on their page. Where both list the same title ID, the official app is the one shown, and the
+store says how many custom apps were hidden. With only the custom catalog on, it replaces the
+official one, which is what you want to test a new version of an app that is already listed. The
+store needs one catalog, so the official one can only be switched off while a custom one is in
+use.
+
+**Custom catalog URL** is the HTTPS directory containing the feed, for example
+`https://example.com/api/v1/`: the API directory, not the website homepage, a GitHub repository
+URL or `index.json`. **Restore official catalog** goes back to homebrew.page alone. Changes are
+saved at once and apply when you close and reopen ProsperoStore.
+
+**Verify custom catalog signatures** is on by default and uses the official catalog's built-in
+public keys, so it suits a copy of the signed official feed. For an independently published feed
+you can turn it off after confirming the warning; the store then labels the catalog **Signatures
+not checked**. Only do this with a publisher you trust: hashes detect changed downloads, but an
+unchecked publisher controls both the download address and its expected hash.
 
 Custom feeds must implement the [catalog API](https://github.com/blackbearreloaded/ps5-homebrew-catalog/blob/main/docs/api.md):
 schema-3 `manifest.json`, `index.json`, `versions.json`, and `apps/<TITLEID>.json`.

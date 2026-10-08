@@ -37,6 +37,8 @@ namespace
 std::mutex guard;
 std::vector<std::string> lines;
 std::string file;
+bool writing = false;
+constexpr std::size_t kLines = 600; // kept in memory; the file has them all
 
 // The first place the trace can be written: /data once the store reaches it, else a
 // USB drive (which ShadowMountPlus 1.7 mounts into the sandbox), else nowhere.
@@ -124,14 +126,39 @@ void trace(const char *format, ...)
     va_start(arguments, format);
     std::vsnprintf(text, sizeof(text), format, arguments);
     va_end(arguments);
-    hui::sys::log("[STORE] trace %s", text);
     std::lock_guard lock(guard);
+    if (lines.size() >= kLines)
+        lines.erase(lines.begin() + 40, lines.begin() + 140); // keep the start-up lines
     lines.emplace_back(text);
+    if (!writing)
+        return;
+    hui::sys::log("[STORE] trace %s", text);
     // Until the file is in /data, look for a better place each time (a few lines a start).
     if (file.rfind("/data/", 0) != 0)
         open_file();
     else
         append(lines.back());
+}
+
+void set_enabled(bool on)
+{
+    std::lock_guard lock(guard);
+    if (on == writing)
+        return;
+    writing = on;
+    if (!on)
+        return;
+    // What was kept while it was off goes out now: the kernel log, then the file.
+    for (const auto &line : lines)
+        hui::sys::log("[STORE] trace %s", line.c_str());
+    file.clear();
+    open_file();
+}
+
+bool enabled()
+{
+    std::lock_guard lock(guard);
+    return writing;
 }
 
 std::vector<std::string> trace_lines()

@@ -112,12 +112,24 @@ int main()
     sys::log("[STORE] keyboard preload dialog=0x%08x module=0x%08x",
              static_cast<unsigned>(keyboard_dialog), static_cast<unsigned>(keyboard_module));
 #ifdef STORE_DEBUG_TRACE
-    store::diag::trace("ProsperoStore debug build, started");
+    // The "Debug log" setting, read as early as the settings file can be: before elevation
+    // that is only where ShadowMountPlus already mounted /data into the sandbox.
+    const auto debug_wanted = []
+    {
+        std::string saved;
+        return hui::save::read_file("/data/prosperostore/settings.txt", &saved, 4096) &&
+               store::parse_settings(saved).debug_log;
+    };
+    store::diag::set_enabled(debug_wanted());
+    store::diag::trace("ProsperoStore started");
     store::diag::trace("keyboard library 0x%08x, usb keyboards 0x%08x, title registry 0x%08x",
                        static_cast<unsigned>(keyboard_module),
                        static_cast<unsigned>(keyboards_ready), static_cast<unsigned>(registry));
-    store::diag::trace_console("start");
-    store::diag::curl_probe("sandboxed");
+    if (store::diag::enabled())
+    {
+        store::diag::trace_console("start");
+        store::diag::curl_probe("sandboxed");
+    }
 #endif
 #ifdef STORE_SANDBOX_CONTROL
     const auto elevation_status = elevation::Status::unavailable;
@@ -156,9 +168,13 @@ int main()
                        static_cast<unsigned>(elevation_status), elevation::path(), since_start());
     store::diag::trace("elevation stopped at: %s, value %d (0x%08x)", elevation::step(),
                        elevation::step_code(), static_cast<unsigned>(elevation::step_code()));
-    store::diag::trace_console("after elevation");
-    if (elevated)
-        store::diag::curl_probe("after elevation");
+    store::diag::set_enabled(debug_wanted());
+    if (store::diag::enabled())
+    {
+        store::diag::trace_console("after elevation");
+        if (elevated)
+            store::diag::curl_probe("after elevation");
+    }
     store::diag::trace("app folder: %s; network: %s (0x%08x)", app_root.c_str(),
                        store::net::transport_name(), static_cast<unsigned>(transport));
 #endif
@@ -442,6 +458,23 @@ int main()
                 screen.notify(std::move(update.message), std::move(update.detail));
             else if (update.kind == store::Update::Kind::store_update)
                 screen.offer_store_update(std::move(update.message));
+            else if (update.kind == store::Update::Kind::setup)
+            {
+                std::vector<std::string> notes;
+                std::size_t at = 0;
+                while (at < update.detail.size())
+                {
+                    const auto end = std::min(update.detail.find('\n', at), update.detail.size());
+                    if (end > at)
+                        notes.push_back(update.detail.substr(at, end - at));
+                    at = end + 1;
+                }
+#ifdef STORE_DEBUG_TRACE
+                for (const auto &line : notes)
+                    store::diag::trace("ShadowMountPlus settings to check: %s", line.c_str());
+#endif
+                screen.set_setup_notes(std::move(notes));
+            }
             else if (update.kind == store::Update::Kind::job)
             {
                 // The update helper waits for the store to close: say so, then close.
@@ -693,7 +726,7 @@ int main()
             }
             else if (verb == "press")
             {
-                // Buttons one after another: r l u d (D-pad), X (Cross), B (Circle).
+                // Buttons one after another: r l u d (D-pad), X (Cross), B (Circle), O (Options).
                 press_keys = argument;
                 press_next = now;
             }
@@ -713,6 +746,8 @@ int main()
                 frame.pressed = action_bit(Action::confirm);
             else if (step == 'B')
                 frame.pressed = action_bit(Action::back);
+            else if (step == 'O')
+                frame.pressed = action_bit(Action::menu);
             else
                 frame.nav = step == 'r'   ? Direction::right
                             : step == 'l' ? Direction::left
@@ -820,11 +855,30 @@ int main()
         }
 #ifdef STORE_DEBUG_TRACE
         // About shows the trace as it grows.
-        if (static std::size_t shown = 0; store::diag::trace_lines().size() != shown)
+        // The Debug log setting takes effect at once; About shows the trace while it is on.
         {
-            auto lines = store::diag::trace_lines();
-            shown = lines.size();
-            screen.set_debug(std::move(lines), store::diag::trace_file());
+            static std::size_t shown = 0;
+            const bool wanted = screen.settings().debug_log;
+            if (wanted != store::diag::enabled())
+            {
+                // The file records both ends: the line is written while it is still on.
+                if (wanted)
+                    store::diag::set_enabled(true);
+                store::diag::trace("debug log switched %s in Settings", wanted ? "on" : "off");
+                if (!wanted)
+                    store::diag::set_enabled(false);
+                if (!wanted)
+                {
+                    screen.set_debug({}, {});
+                    shown = 0;
+                }
+            }
+            if (wanted && store::diag::trace_lines().size() != shown)
+            {
+                auto lines = store::diag::trace_lines();
+                shown = lines.size();
+                screen.set_debug(std::move(lines), store::diag::trace_file());
+            }
         }
 #endif
         screen.update(keyboard_owns_input ? InputFrame{} : frame, dt, feedback);
