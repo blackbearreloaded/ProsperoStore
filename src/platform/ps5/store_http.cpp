@@ -49,14 +49,14 @@ constexpr const char *kCaList = "/system/common/cert/CA_LIST.cer";
 bool elevated_transport = false;
 bool curl_ready = false;
 #ifdef STORE_DEBUG_TRACE
-// The debug build's record of requests: every failure (the first twenty) and the first
-// few that worked, so a trace shows both what the network refuses and what it carries.
+// The debug log's record of requests: every failure (the first two hundred) and the first
+// forty that worked, so a trace shows both what the network refuses and what it carries.
 std::atomic<int> traced_failures = 0, traced_successes = 0;
 void trace_request(const std::string &url, const Response &out, const char *transport,
                    const char *step, unsigned code)
 {
     const bool worked = out.error.empty() && (out.status == 200 || out.status == 304);
-    if (worked ? traced_successes.fetch_add(1) >= 3 : traced_failures.fetch_add(1) >= 20)
+    if (worked ? traced_successes.fetch_add(1) >= 40 : traced_failures.fetch_add(1) >= 200)
         return;
     store::diag::trace("request %s: %.110s -> HTTP %d, %llu bytes%s%s%s%s (code 0x%08x)", transport,
                        url.c_str(), out.status, static_cast<unsigned long long>(out.bytes),

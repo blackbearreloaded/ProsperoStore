@@ -132,6 +132,24 @@ Updating from inside the store is the easy way. To update by hand, replace the `
 with the one from the new release; if the console then says it can't start the app, see the note
 about permissions under [Install](#install).
 
+## Reporting a problem
+
+If the store shows no apps, stays offline or can't install something, switch on **Debug log** in
+**Settings** (Options button), close the store and open it again, and repeat what failed. The
+store then records each step it takes: the access it was given, the network requests, the
+catalog and every install.
+
+Send one of these with your report:
+
+- a photo of **About**, where the **Debug trace** section lists the steps (scroll for all of it);
+- the file `/data/prosperostore/debug-trace.txt`, fetched by FTP;
+- if the store couldn't write to `/data`: `ProsperoStore-debug-trace.txt` on a USB drive that was
+  plugged in before the store was opened.
+
+Say which console and firmware you have, your ShadowMountPlus version and your payload loader.
+The log holds no account details or passwords. Switch **Debug log** off again afterwards: while
+it is on, the store starts a little slower.
+
 ## Known limits of this version
 
 - ZIP apps only; image files (ffpfsc) are listed but can't be installed.

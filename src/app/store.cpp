@@ -2890,7 +2890,8 @@ std::string format_settings(const Settings &settings)
     return "location=" + settings.location + "\nupdates=" + (settings.check_updates ? "1" : "0") +
            "\nsounds=" + (settings.sounds ? "1" : "0") +
            "\nvibration=" + (settings.vibration ? "1" : "0") +
-           "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") + "\n";
+           "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") +
+           "\ndebug=" + (settings.debug_log ? "1" : "0") + "\n";
 }
 
 Settings parse_settings(std::string_view text)
@@ -2915,6 +2916,8 @@ Settings parse_settings(std::string_view text)
             settings.vibration = value != "0";
         else if (key == "motion")
             settings.reduce_motion = value == "reduced";
+        else if (key == "debug")
+            settings.debug_log = value == "1";
     }
     return settings;
 }
@@ -3047,7 +3050,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         about_.handle(input, feedback);
         return;
     }
-    constexpr int kRows = 6;
+    constexpr int kRows = 7;
     if (step)
     {
         const int next = setting_focus_ + step;
@@ -3083,6 +3086,12 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         settings_.vibration = !settings_.vibration;
     else if (setting_focus_ == 4)
         settings_.reduce_motion = !settings_.reduce_motion;
+    else if (setting_focus_ == 5)
+    {
+        settings_.debug_log = !settings_.debug_log;
+        if (settings_.debug_log)
+            notify("Debug log is on", "Reopen the store, repeat the problem, then open About.");
+    }
     else
     {
         // The store's own page says what can be done about its version.
@@ -3376,24 +3385,27 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             {6, "Vibration", "A light answer from the controller.", 1, "", settings_.vibration},
             {8, "Reduce motion", "Nothing drifts, floats or slides; things fade instead.", 1, "",
              settings_.reduce_motion},
+            {4, "Debug log", "Records every step for a report: see About, or debug-trace.txt.", 1,
+             "", settings_.debug_log},
             {7, "ProsperoStore", "Its page updates it.", 2,
              restart_needed_ ? "Restart to finish"
              : newer         ? "Version " + self->available_version + " available"
                              : "Version " + self_version_ + (self ? ", up to date" : ""),
              newer || restart_needed_},
         };
-        float y = panel.y + 32.0f;
-        for (int i = 0; i < 6; ++i)
+        // Seven rows share the panel: a little closer together than six were.
+        float y = panel.y + 28.0f;
+        for (int i = 0; i < 7; ++i)
         {
-            const Rect row{px - 16.0f, y, pw + 32.0f, 108.0f};
+            const Rect row{px - 16.0f, y, pw + 32.0f, 96.0f};
             if (i == setting_focus_)
                 row_focus(row);
             else if (i > 0)
                 list.rounded_rect({px, y - 8.0f, pw, 1.0f}, 0, kInk.with_alpha(0.08f));
             list.circle(px + 28.0f, row.cy(), 28.0f, kInk.with_alpha(0.08f));
             sign(list, rows[i].sign, px + 28.0f, row.cy(), kInk.with_alpha(0.9f));
-            ui::text(list, fonts.semibold, rows[i].label, px + 82.0f, row.y + 50.0f, 26, kInk);
-            ui::text(list, fonts.regular, rows[i].note, px + 82.0f, row.y + 84.0f, 20,
+            ui::text(list, fonts.semibold, rows[i].label, px + 82.0f, row.y + 44.0f, 26, kInk);
+            ui::text(list, fonts.regular, rows[i].note, px + 82.0f, row.y + 76.0f, 20,
                      kInk.with_alpha(0.6f));
             const float right = px + pw;
             if (rows[i].kind == 1)
@@ -3420,7 +3432,7 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
                      right - fonts.semibold.measure(rows[i].value, 40.0f * 0.58f) - 36.0f, row.cy(),
                      40.0f, rows[i].on ? kAccent : kInk.with_alpha(0.12f),
                      rows[i].on ? kOnAccent : kInk, 1.0f, kAllLayers);
-            y += 120.0f;
+            y += 106.0f;
         }
         ui::text(list, fonts.regular, "Changes are saved as you make them.", kMargin, 640.0f, 20,
                  kInk.with_alpha(0.5f));

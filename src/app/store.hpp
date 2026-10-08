@@ -70,6 +70,9 @@ struct Settings
     bool sounds = true;
     bool vibration = true;
     bool reduce_motion = false; // no drifting, floating or sliding: things fade instead
+    // Records what the store does at each step, for a report: shown in About, written to
+    // /data/prosperostore/debug-trace.txt (or a USB drive) and the kernel log.
+    bool debug_log = false;
 };
 std::string format_settings(const Settings &settings);
 Settings parse_settings(std::string_view text);
