@@ -4,6 +4,7 @@
 #pragma once
 #include "catalog/catalog.hpp"
 #include "net/http.hpp"
+#include <set>
 
 namespace store::catalog
 {
@@ -16,6 +17,32 @@ struct Snapshot
     bool accepted = false; // complete and valid under the user's selected trust policy
     bool online = false;
 };
+
+// The official catalog with a custom one beside it. The custom catalog only adds apps:
+// where both list a title ID the official entry stays, so a custom catalog can never
+// stand in for an app the official one offers. clashes names the entries left out.
+inline Snapshot with_extra(Snapshot official, const Snapshot &extra, std::vector<std::string> *clashes)
+{
+    if (!extra.accepted)
+        return official;
+    std::set<std::string> listed;
+    for (const auto &entry : official.entries)
+        listed.insert(entry.id);
+    for (auto entry : extra.entries)
+    {
+        if (listed.contains(entry.id))
+        {
+            if (clashes)
+                clashes->push_back(entry.id);
+            continue;
+        }
+        entry.extra = true;
+        if (const auto version = extra.versions.find(entry.id); version != extra.versions.end())
+            official.versions[entry.id] = version->second;
+        official.entries.push_back(std::move(entry));
+    }
+    return official;
+}
 
 class Client
 {

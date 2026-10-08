@@ -231,8 +231,12 @@ int main()
             save::read_file(std::string(storage_root) + "/settings.txt", &saved, 4096);
         screen.set_settings(store::parse_settings(saved));
         service.check_updates = screen.settings().check_updates;
-        service.catalog_url = screen.settings().catalog_url;
-        service.verify_signatures = screen.settings().verify_signatures;
+        // The custom catalog only when it is switched on; the official one is always signed.
+        const auto &chosen = screen.settings();
+        const bool custom = chosen.custom_active();
+        service.catalog_url = custom ? chosen.catalog_url : std::string(store::catalog::kDefaultApi);
+        service.verify_signatures = custom ? chosen.verify_signatures : true;
+        service.with_official = custom && chosen.use_official;
     }
 #ifdef STORE_INSTALLER
     service.installer = elevated;

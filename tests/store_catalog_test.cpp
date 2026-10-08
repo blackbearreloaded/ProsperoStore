@@ -2,6 +2,7 @@
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "catalog/client.hpp"
 #include "catalog/catalog.hpp"
 #include "third_party/monocypher/monocypher-ed25519.h"
 
@@ -90,5 +91,35 @@ int main()
     signature[0] ^= 1;
     assert(!verify_manifest(manifest, signature, 0, keys, verified, error));
     assert(verified.sequence == 8);
+    {
+        // A custom catalog beside the official one only adds: a shared title ID stays official.
+        using store::catalog::Entry;
+        using store::catalog::Snapshot;
+        Snapshot official, custom;
+        official.accepted = custom.accepted = true;
+        Entry store_app, game, mine, fake;
+        store_app.id = "PPSA99000";
+        store_app.name = "ProsperoStore";
+        game.id = "PPSA99001";
+        mine.id = "PPSA12345";
+        mine.name = "Mine";
+        fake.id = "PPSA99000";
+        fake.name = "Not the store";
+        official.entries = {store_app, game};
+        official.versions = {{"PPSA99000", "01.000.040"}};
+        custom.entries = {fake, mine};
+        custom.versions = {{"PPSA99000", "09.000.000"}, {"PPSA12345", "01.000.000"}};
+        std::vector<std::string> clashes;
+        const auto both = store::catalog::with_extra(official, custom, &clashes);
+        assert(both.entries.size() == 3 && both.entries[0].name == "ProsperoStore" &&
+               !both.entries[0].extra && both.entries[2].id == "PPSA12345" &&
+               both.entries[2].extra);
+        assert(both.versions.at("PPSA99000") == "01.000.040" &&
+               both.versions.at("PPSA12345") == "01.000.000");
+        assert(clashes.size() == 1 && clashes[0] == "PPSA99000");
+        // A custom catalog that wasn't accepted adds nothing.
+        custom.accepted = false;
+        assert(store::catalog::with_extra(official, custom, &clashes).entries.size() == 2);
+    }
     std::cout << "Catalog trust and parser checks passed\n";
 }

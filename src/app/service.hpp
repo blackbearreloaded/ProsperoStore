@@ -68,6 +68,8 @@ class Service
     // Captured at start; changes in Settings apply on the next launch.
     std::string catalog_url = catalog::kDefaultApi;
     bool verify_signatures = true;
+    // With a custom catalog set: keep the official one and add the custom catalog's apps.
+    bool with_official = false;
     // Tests only: replaces the environment built from the console's configuration.
     std::optional<install::Environment> installer_environment;
     bool start();

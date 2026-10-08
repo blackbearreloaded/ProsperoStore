@@ -2,6 +2,7 @@
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <set>
 #include "catalog/client.hpp"
 #include "core/save_file.hpp"
 #include <fcntl.h>

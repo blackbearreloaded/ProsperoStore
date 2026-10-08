@@ -35,6 +35,9 @@ struct Entry
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
     std::uint64_t size = 0;
+    // Not from the catalog's files: set by the store on entries that come from the custom
+    // catalog shown beside the official one.
+    bool extra = false;
 };
 
 struct Manifest

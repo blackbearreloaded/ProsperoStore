@@ -593,7 +593,21 @@ void Service::run()
         publish(std::move(failure));
         return;
     }
-    catalog::Client client(root_.empty() ? "" : root_ + "/cache", catalog_url, verify_signatures);
+    // "Official plus custom": the official catalog is the one everything below is about,
+    // signed and checked as ever; the custom one is loaded beside it and only adds apps.
+    const bool additive = with_official && catalog_url != catalog::kDefaultApi;
+    const std::string cache_folder = root_.empty() ? "" : root_ + "/cache";
+    catalog::Client client(cache_folder, additive ? std::string(catalog::kDefaultApi) : catalog_url,
+                           additive ? true : verify_signatures);
+    catalog::Client extra_client(cache_folder, catalog_url, verify_signatures);
+    catalog::Snapshot extra;
+    std::string extra_error;
+    std::vector<std::string> clashes;
+    const auto shown = [&](const catalog::Snapshot &official)
+    {
+        clashes.clear();
+        return additive ? catalog::with_extra(official, extra, &clashes) : official;
+    };
     system::ScanPolicy scan_policy;
     const bool can_scan = load_policy(scan_policy);
 #ifdef STORE_DEVELOPMENT
@@ -617,6 +631,8 @@ void Service::run()
     catalog::Snapshot snapshot;
     std::string error;
     const bool had_cache = client.cached(snapshot, error);
+    if (additive)
+        (void)extra_client.cached(extra, extra_error);
 #ifdef STORE_DEBUG_TRACE
     diag::trace("catalog cache in %s: %s%s%s", root_.empty() ? "(no store folder)" : root_.c_str(),
                 had_cache ? "found" : "none", error.empty() ? "" : ", ", error.c_str());
@@ -625,7 +641,7 @@ void Service::run()
     {
         Update cached;
         cached.kind = Update::Kind::catalog;
-        cached.snapshot = snapshot;
+        cached.snapshot = shown(snapshot);
         cached.message = snapshot.verified ? "Offline catalog • Checking for updates"
                                            : "Offline catalog • Signatures not checked";
         publish(std::move(cached));
@@ -646,11 +662,23 @@ void Service::run()
             for (unsigned tick = 0; tick < (10U << attempt) && !control_.cancelled.load(); ++tick)
                 hui::sys::sleep_us(100000);
     }
+    // The custom catalog beside it: two tries, and the official one is shown either way.
+    bool extra_refreshed = false;
+    for (unsigned attempt = 0; additive && attempt < 2 && !control_.cancelled.load(); ++attempt)
+    {
+        if ((extra_refreshed = extra_client.refresh(extra, control_, extra_error)))
+            break;
+        hui::sys::log("[STORE] custom catalog attempt=%u error=%s", attempt + 1,
+                      extra_error.c_str());
+#ifdef STORE_DEBUG_TRACE
+        diag::trace("custom catalog attempt %u of 2: %s", attempt + 1, extra_error.c_str());
+#endif
+    }
     if (!control_.cancelled.load())
     {
         Update result;
         result.kind = snapshot.accepted ? Update::Kind::catalog : Update::Kind::error;
-        result.snapshot = snapshot;
+        result.snapshot = shown(snapshot);
         result.message = refreshed ? (snapshot.verified ? "Catalog verified • Up to date"
                                                         : "Signatures not checked • Up to date")
                                    : "Offline • " + error;
@@ -660,7 +688,33 @@ void Service::run()
                       snapshot.verified, refreshed,
                       static_cast<unsigned long long>(snapshot.manifest.sequence),
                       snapshot.entries.size());
+        if (additive && snapshot.accepted)
+            result.message += extra.accepted
+                                  ? (extra.verified ? " • Custom catalog added"
+                                                    : " • Custom catalog added, not checked")
+                                  : " • Custom catalog unavailable";
         publish(std::move(result));
+        if (additive && !control_.cancelled.load() && (!extra.accepted || !clashes.empty()))
+        {
+            // Said once: why the custom catalog, or some of it, isn't on the shelves.
+            Update notice;
+            notice.kind = Update::Kind::notice;
+            if (!extra.accepted)
+            {
+                notice.message = "Custom catalog not loaded";
+                notice.detail = extra_error.empty() ? "It could not be read." : extra_error;
+            }
+            else
+            {
+                notice.message =
+                    std::to_string(clashes.size()) +
+                    (clashes.size() == 1 ? " custom app hidden" : " custom apps hidden");
+                notice.detail = "homebrew.page lists the same title ID, and its app is the one "
+                                "shown: " +
+                                clashes.front() + (clashes.size() > 1 ? " and others." : ".");
+            }
+            publish(std::move(notice));
+        }
     }
     if (refreshed && check_updates && !control_.cancelled.load())
         check_store_update();
@@ -724,8 +778,14 @@ void Service::run()
         if (!id.empty())
         {
             Update result;
-            if (client.detail(snapshot, id, result.entry, control_, result.message))
+            // An app the official catalog doesn't list is the custom catalog's to describe.
+            const bool from_extra =
+                additive && std::none_of(snapshot.entries.begin(), snapshot.entries.end(),
+                                         [&](const auto &entry) { return entry.id == id; });
+            if (from_extra ? extra_client.detail(extra, id, result.entry, control_, result.message)
+                           : client.detail(snapshot, id, result.entry, control_, result.message))
             {
+                result.entry.extra = from_extra;
                 result.kind = Update::Kind::detail;
                 if (!result.entry.large_icon.empty())
                 {

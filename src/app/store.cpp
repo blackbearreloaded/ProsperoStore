@@ -1492,7 +1492,9 @@ void Screen::draw_top_bar(const ui::Fonts &fonts)
     const float x = kMargin + 42.0f + brand + 20.0f;
     list.rounded_rect({x, kTopY - 11.0f, 1.5f, 22.0f}, 0, kInk.with_alpha(0.25f));
     ui::text(list, fonts.semibold,
-             active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page" : "Custom catalog",
+             active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page"
+             : active_with_official_                     ? "homebrew.page + custom"
+                                                         : "Custom catalog",
              x + 20.0f, centred(kTopY, 20), 20, kAccent.with_alpha(0.92f));
 
     // The sections: words, the active one lit, one gold line gliding under it.
@@ -2586,6 +2588,8 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
         chip(app.detail->size ? size_text(app.detail->size) : std::string());
         chip(app.detail->license);
         chip(app.detail->format.empty() ? std::string() : ui::upper(app.detail->format));
+        // From the custom catalog shown beside the official one: said on its page.
+        chip(app.detail->extra ? std::string("Custom catalog") : std::string());
     }
     ui::Canvas canvas{list, fonts, glass, time_};
     article_.draw(canvas);
@@ -2859,7 +2863,9 @@ std::string format_settings(const Settings &settings)
            "\nvibration=" + (settings.vibration ? "1" : "0") +
            "\nmotion=" + (settings.reduce_motion ? "reduced" : "full") +
            "\ncatalog_url=" + settings.catalog_url +
-           "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") + "\n";
+           "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") +
+           "\nuse_official=" + (settings.use_official ? "1" : "0") +
+           "\nuse_custom=" + (settings.use_custom ? "1" : "0") + "\n";
 }
 
 Settings parse_settings(std::string_view text)
@@ -2888,7 +2894,13 @@ Settings parse_settings(std::string_view text)
             catalog::normalize_api(value, settings.catalog_url);
         else if (key == "verify_signatures")
             settings.verify_signatures = value != "0";
+        else if (key == "use_official")
+            settings.use_official = value != "0";
+        else if (key == "use_custom")
+            settings.use_custom = value == "1";
     }
+    if (!settings.custom_active())
+        settings.use_official = true;
     return settings;
 }
 
@@ -3044,7 +3056,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         about_.handle(input, feedback);
         return;
     }
-    const int kRows = development_options_ ? 3 : 7;
+    const int kRows = development_options_ ? 5 : 7;
     if (step)
     {
         const int next = setting_focus_ + step;
@@ -3061,8 +3073,8 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         return;
     const int setting = development_options_ ? setting_focus_ + 5
                         : setting_focus_ < 5 ? setting_focus_
-                                             : setting_focus_ + 3;
-    if (setting == 9)
+                                             : setting_focus_ + 5;
+    if (setting == 11)
     {
         if (input.is_pressed(Action::confirm))
         {
@@ -3095,11 +3107,35 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         settings_.reduce_motion = !settings_.reduce_motion;
     else if (setting == 5)
     {
+        // The official catalog can only go while a custom one is in use.
+        if (settings_.use_official && !settings_.custom_active())
+        {
+            notify("Switch a custom catalog on first",
+                   "The store needs one catalog: set a custom catalog before switching "
+                   "homebrew.page off.");
+            return refuse(feedback, input.nav_repeat, 0.0f, 0.0f);
+        }
+        settings_.use_official = !settings_.use_official;
+        notify("Catalog settings saved", "Close and reopen ProsperoStore to apply.");
+    }
+    else if (setting == 6)
+    {
+        settings_.use_custom = !settings_.use_custom;
+        if (settings_.use_custom && settings_.catalog_url == catalog::kDefaultApi)
+            pending_catalog_url = true; // no address yet: ask for it now
+        if (!settings_.custom_active())
+            settings_.use_official = true;
+        notify("Catalog settings saved",
+               settings_.use_custom ? "Close and reopen ProsperoStore to add your catalog."
+                                    : "Close and reopen ProsperoStore to apply.");
+    }
+    else if (setting == 7)
+    {
         if (input.is_pressed(Action::confirm))
             pending_catalog_url = true;
         return;
     }
-    else if (setting == 6)
+    else if (setting == 8)
     {
         if (settings_.verify_signatures)
         {
@@ -3119,11 +3155,13 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         settings_.verify_signatures = true;
         notify("Catalog settings saved", "Signature checks will resume after reopening the store.");
     }
-    else if (setting == 7)
+    else if (setting == 9)
     {
         if (!input.is_pressed(Action::confirm))
             return;
         settings_.verify_signatures = true;
+        settings_.use_official = true;
+        settings_.use_custom = false;
         set_catalog_url(catalog::kDefaultApi);
     }
     else
@@ -3419,13 +3457,19 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             {6, "Vibration", "A light answer from the controller.", 1, "", settings_.vibration},
             {8, "Reduce motion", "Nothing drifts, floats or slides; things fade instead.", 1, "",
              settings_.reduce_motion},
-            {4, "Catalog API URL", "HTTPS API directory. Applies when the store next opens.", 3,
-             settings_.catalog_url, false},
-            {4, "Verify catalog signatures",
-             "Keep on for the official catalog. Applies next launch.", 1, "",
+            {4, "Official catalog", "homebrew.page, signed. With both on, its apps win a clash.",
+             1, "", settings_.use_official},
+            {4, "Custom catalog", "Your own feed. With both on, its apps are added.", 1, "",
+             settings_.use_custom},
+            {4, "Custom catalog URL", "HTTPS API directory. Applies when the store next opens.", 3,
+             settings_.catalog_url == catalog::kDefaultApi ? std::string("Not set")
+                                                           : settings_.catalog_url,
+             false},
+            {4, "Verify custom catalog signatures",
+             "The official catalog is always checked. Applies next launch.", 1, "",
              settings_.verify_signatures},
             {4, "Restore official catalog",
-             "Restores homebrew.page and signature checks next launch.", 2, "Restore", false},
+             "Only homebrew.page, with signature checks, next launch.", 2, "Restore", false},
             {7, "ProsperoStore", "Its page updates it.", 2,
              restart_needed_ ? "Restart to finish"
              : newer         ? "Version " + self->available_version + " available"
@@ -3444,10 +3488,10 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             y += 112.0f;
         }
         const int first = std::max(0, setting_focus_ - 5);
-        const int count = development_options_ ? 3 : 7;
+        const int count = development_options_ ? 5 : 7;
         for (int focus = first; focus < std::min(first + 6, count); ++focus)
         {
-            const int i = development_options_ ? focus + 5 : focus < 5 ? focus : focus + 3;
+            const int i = development_options_ ? focus + 5 : focus < 5 ? focus : focus + 5;
             const Rect row{px - 16.0f, y, pw + 32.0f, 108.0f};
             if (focus == setting_focus_)
                 row_focus(row);
@@ -3510,7 +3554,8 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
                                kInk.with_alpha(0.62f));
         ui::text(list, fonts.semibold,
                  active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page"
-                                                             : "your custom catalog",
+                 : active_with_official_ ? "homebrew.page and your custom catalog"
+                                         : "your custom catalog",
                  px + 152.0f + words, panel.y + 136.0f, 22, kAccent);
         words = ui::text(list, fonts.regular, "Brought to you by ", px + 152.0f, panel.y + 168.0f,
                          22, kInk.with_alpha(0.62f));
