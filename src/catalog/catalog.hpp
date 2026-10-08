@@ -21,6 +21,12 @@ constexpr std::uint64_t kArtifactLimit = 2ULL * 1024 * 1024 * 1024;
 bool title_id(std::string_view value);
 bool version(std::string_view value);
 bool update_available(std::string_view installed, std::string_view available);
+// The catalog is published twice: on its own site, and as a mirror for networks that block that
+// site. Both are signed with the same keys; each has its own manifest, because the icon
+// addresses inside the files name the place they are served from.
+inline constexpr std::string_view kApi = "https://homebrew.page/api/v1/";
+inline constexpr std::string_view kApiMirror =
+    "https://blackbearreloaded.github.io/ps5-homebrew-catalog/";
 bool api_url(std::string_view url);
 bool artifact_url(std::string_view url, bool redirected = false);
 std::string sha256(std::string_view bytes);

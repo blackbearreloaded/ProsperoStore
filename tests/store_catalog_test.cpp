@@ -20,6 +20,19 @@ int main()
     assert(!update_available("1.000.000", "01.000.000"));
     assert(sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     assert(api_url("https://homebrew.page/api/v1/index.json"));
+    // The mirror is one path on a shared host: nothing else on that host is the catalog.
+    assert(api_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/index.json"));
+    assert(api_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/icons/"
+                   "PPSA99000.png?v=0f"));
+    for (const char *url :
+         {"https://blackbearreloaded.github.io/",
+          "https://blackbearreloaded.github.io/other-repo/api/v1/index.json",
+          "https://someone-else.github.io/ps5-homebrew-catalog/api/v1/index.json",
+          "https://blackbearreloaded.github.io/ps5-homebrew-catalog/../x/index.json",
+          "https://blackbearreloaded.github.io/ps5-homebrew-catalog/%2e%2e/x",
+          "https://blackbearreloaded.github.io.evil.example/ps5-homebrew-catalog/a",
+          "http://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/index.json"})
+        assert(!api_url(url));
     assert(artifact_url("https://github.com/owner/repo/releases/download/v1/a.zip"));
     assert(!artifact_url("https://release-assets.githubusercontent.com/a"));
     assert(artifact_url("https://release-assets.githubusercontent.com/a", true));
