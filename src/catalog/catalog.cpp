@@ -8,6 +8,7 @@
 #include "third_party/yyjson/yyjson.h"
 
 #include <algorithm>
+#include <charconv>
 #include <memory>
 #include <set>
 
@@ -194,6 +195,31 @@ bool update_available(std::string_view installed, std::string_view available)
 
 bool api_url(std::string_view url)
 {
+    auto authority = host(url);
+    if (authority.empty() || url.find('#') != url.npos)
+        return false;
+    const auto colon = authority.find(':');
+    if (colon != authority.npos)
+    {
+        const auto port = authority.substr(colon + 1);
+        unsigned number = 0;
+        const auto result = std::from_chars(port.data(), port.data() + port.size(), number);
+        if (result.ec != std::errc{} || result.ptr != port.data() + port.size() || number == 0 ||
+            number > 65535)
+            return false;
+        authority = authority.substr(0, colon);
+    }
+    return !authority.empty() &&
+           std::all_of(authority.begin(), authority.end(),
+                       [](char c)
+                       {
+                           return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                  (c >= '0' && c <= '9') || c == '.' || c == '-';
+                       });
+}
+
+bool official_url(std::string_view url)
+{
     const auto name = host(url);
     if (name == "homebrew.page")
         return true;
@@ -201,6 +227,21 @@ bool api_url(std::string_view url)
     // of its identity, and nothing may climb out of it.
     return name == "blackbearreloaded.github.io" && url.starts_with(kApiMirror) &&
            url.find("..") == std::string_view::npos && url.find('%') == std::string_view::npos;
+}
+
+bool normalize_api(std::string_view value, std::string &out)
+{
+    while (!value.empty() && value.front() == ' ')
+        value.remove_prefix(1);
+    while (!value.empty() && value.back() == ' ')
+        value.remove_suffix(1);
+    std::string candidate(value.empty() ? kDefaultApi : value);
+    if (!candidate.ends_with('/'))
+        candidate += '/';
+    if (candidate.size() > 512 || candidate.find('?') != candidate.npos || !api_url(candidate))
+        return false;
+    out = std::move(candidate);
+    return true;
 }
 bool artifact_url(std::string_view url, bool redirected)
 {
@@ -273,6 +314,12 @@ bool verify_manifest(std::string_view body, std::string_view signature, std::uin
                             reinterpret_cast<const std::uint8_t *>(body.data()), body.size()) == 0;
     if (!signed_by_us)
         return false;
+    return parse_manifest(body, highest, out, error);
+}
+
+bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out, std::string &error)
+{
+    error = "The catalog manifest is invalid";
     Json json;
     auto *root = json.read(body, kVersionsLimit);
     auto *sequence = yyjson_obj_get(root, "sequence");

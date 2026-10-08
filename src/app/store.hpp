@@ -70,6 +70,17 @@ struct Settings
     bool sounds = true;
     bool vibration = true;
     bool reduce_motion = false; // no drifting, floating or sliding: things fade instead
+    std::string catalog_url = catalog::kDefaultApi;
+    // The two sources, each switched on or off by itself in Development options. Both on:
+    // the custom catalog's apps are added to homebrew.page's. Never both off.
+    bool use_official = true;
+    bool use_custom = false;
+    // The custom catalog is in use: switched on, and its address is not the official one.
+    bool custom_active() const
+    {
+        return use_custom && catalog_url != catalog::kDefaultApi;
+    }
+    bool verify_signatures = true;
 };
 std::string format_settings(const Settings &settings);
 Settings parse_settings(std::string_view text);
@@ -122,6 +133,9 @@ class Screen
     void finish_job(bool ok, bool restart, std::string title, std::string body);
     void set_settings(Settings settings)
     {
+        active_catalog_url_ =
+            settings.custom_active() ? settings.catalog_url : std::string(catalog::kDefaultApi);
+        active_with_official_ = settings.custom_active() && settings.use_official;
         settings_ = std::move(settings);
     }
     const Settings &settings() const
@@ -129,6 +143,8 @@ class Screen
         return settings_;
     }
     bool settings_changed = false; // the frame loop saves them and clears this
+    bool pending_catalog_url = false;
+    void set_catalog_url(std::string_view value);
     // The scanned folders apps can be installed to, with the room in each.
     void set_locations(std::vector<std::pair<std::string, std::uint64_t>> locations);
     // The running store: its title and the version it was built as.
@@ -312,6 +328,8 @@ class Screen
     float rate_ = 0.0f, rate_time_ = 0.0f;
     std::uint64_t rate_done_ = 0;
     Settings settings_;
+    std::string active_catalog_url_ = catalog::kDefaultApi;
+    bool active_with_official_ = false; // the custom catalog is shown beside the official one
     std::vector<std::pair<std::string, std::uint64_t>> locations_;
     std::string self_id_, self_version_, self_location_ = "/data/homebrew";
     bool restart_needed_ = false;
@@ -322,6 +340,7 @@ class Screen
     };
     std::vector<Done> history_;
     bool panel_ = false;
+    bool development_options_ = false;
     int panel_tab_ = 1, queue_focus_ = 0, setting_focus_ = 0;
     hui::tween::Spring panel_value_;
     hui::ui::TextView about_;
@@ -336,6 +355,7 @@ class Screen
         none,
         adopt,
         quit,
+        disable_signatures,
         store_update
     } ask_ = Ask::none;
     enum class StoreOffer

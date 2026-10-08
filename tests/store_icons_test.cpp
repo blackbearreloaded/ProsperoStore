@@ -38,6 +38,8 @@ int main()
     entry.icon_hash = "revision-two";
     assert(store::catalog::Icons::key(entry) != key && !cache.cached(entry, image));
     entry.icon = "https://example.com/icon.png";
+    assert(!store::catalog::Icons::key(entry).empty() && cache.store(entry, encoded, image));
+    entry.icon = "http://example.com/icon.png";
     assert(store::catalog::Icons::key(entry).empty() && !cache.store(entry, encoded, image));
     entry.icon = "https://homebrew.page/icon.png";
     entry.id = "../PPSA99000";

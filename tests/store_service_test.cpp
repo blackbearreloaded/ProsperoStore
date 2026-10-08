@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "app/service.hpp"
 #include "catalog/icons.hpp"
+#include "core/save_file.hpp"
 #include "third_party/miniz/miniz.h"
 #include <atomic>
 #include <cassert>
@@ -25,6 +26,7 @@ store::catalog::Snapshot fixture()
 {
     store::catalog::Snapshot result;
     result.verified = true;
+    result.accepted = true;
     result.manifest.sequence = 75;
     for (unsigned i = 0; i < 16; ++i)
     {
@@ -32,6 +34,8 @@ store::catalog::Snapshot fixture()
         entry.id = "PPSA" + std::to_string(99000 + i);
         entry.icon = "https://homebrew.page/icons/" + entry.id + ".png";
         entry.icon_hash = "one";
+        entry.version = "1.0.10";
+        result.versions[entry.id] = "01.000.010";
         result.entries.push_back(entry);
     }
     return result;
@@ -85,6 +89,7 @@ bool Client::detail(const Snapshot &, const std::string &id, Entry &entry, net::
     }
     entry = fixture().entries.front();
     entry.large_icon = "https://homebrew.page/full/PPSA99000.png";
+    entry.page = "https://homebrew.page/app/PPSA99000/";
     return true;
 }
 } // namespace store::catalog
@@ -278,6 +283,16 @@ int main()
     const auto before = std::chrono::steady_clock::now();
     service.stop();
     assert(std::chrono::steady_clock::now() - before < 1s);
+    // Closing during the initial network refresh must still persist next-launch settings.
+    refresh_ready = false;
+    store::Service closing(root);
+    assert(closing.start());
+    const std::string settings = "catalog_url=https://dev.example/api/v1/\nverify_signatures=0\n";
+    while (!closing.save_settings(settings))
+        std::this_thread::sleep_for(1ms);
+    closing.stop();
+    std::string saved;
+    assert(hui::save::read_file(root + "/settings.txt", &saved) && saved == settings);
     std::filesystem::remove_all(root);
     check_installer();
 }

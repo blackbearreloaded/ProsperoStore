@@ -20,10 +20,8 @@
 #endif
 #include "install/files.hpp"
 #include "catalog/icons.hpp"
-#include "../../examples/update-check/update_check.h"
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <set>
 #include <cerrno>
 #include <fcntl.h>
@@ -76,6 +74,14 @@ void Service::stop()
     job_control_.connection.reset();
     icons_started_ = false;
     started_ = false;
+    // A user may change the feed and close while the initial refresh is still retrying.
+    if (settings_pending_ && !root_.empty())
+    {
+        const auto error = hui::save::write_atomic(root_ + "/settings.txt", settings_);
+        if (!error.empty())
+            hui::sys::log("[STORE] settings save failed: %s", error.c_str());
+        settings_pending_ = false;
+    }
 }
 bool Service::take(std::vector<Update> &updates)
 {
@@ -587,7 +593,21 @@ void Service::run()
         publish(std::move(failure));
         return;
     }
-    catalog::Client client(root_.empty() ? "" : root_ + "/cache");
+    // "Official plus custom": the official catalog is the one everything below is about,
+    // signed and checked as ever; the custom one is loaded beside it and only adds apps.
+    const bool additive = with_official && catalog_url != catalog::kDefaultApi;
+    const std::string cache_folder = root_.empty() ? "" : root_ + "/cache";
+    catalog::Client client(cache_folder, additive ? std::string(catalog::kDefaultApi) : catalog_url,
+                           additive ? true : verify_signatures);
+    catalog::Client extra_client(cache_folder, catalog_url, verify_signatures);
+    catalog::Snapshot extra;
+    std::string extra_error;
+    std::vector<std::string> clashes;
+    const auto shown = [&](const catalog::Snapshot &official)
+    {
+        clashes.clear();
+        return additive ? catalog::with_extra(official, extra, &clashes) : official;
+    };
     system::ScanPolicy scan_policy;
     const bool can_scan = load_policy(scan_policy);
 #ifdef STORE_DEVELOPMENT
@@ -611,6 +631,8 @@ void Service::run()
     catalog::Snapshot snapshot;
     std::string error;
     const bool had_cache = client.cached(snapshot, error);
+    if (additive)
+        (void)extra_client.cached(extra, extra_error);
 #ifdef STORE_DEBUG_TRACE
     diag::trace("catalog cache in %s: %s%s%s", root_.empty() ? "(no store folder)" : root_.c_str(),
                 had_cache ? "found" : "none", error.empty() ? "" : ", ", error.c_str());
@@ -619,8 +641,9 @@ void Service::run()
     {
         Update cached;
         cached.kind = Update::Kind::catalog;
-        cached.snapshot = snapshot;
-        cached.message = "Offline catalog • Checking for updates";
+        cached.snapshot = shown(snapshot);
+        cached.message = snapshot.verified ? "Offline catalog • Checking for updates"
+                                           : "Offline catalog • Signatures not checked";
         publish(std::move(cached));
     }
     bool refreshed = false;
@@ -639,17 +662,59 @@ void Service::run()
             for (unsigned tick = 0; tick < (10U << attempt) && !control_.cancelled.load(); ++tick)
                 hui::sys::sleep_us(100000);
     }
+    // The custom catalog beside it: two tries, and the official one is shown either way.
+    bool extra_refreshed = false;
+    for (unsigned attempt = 0; additive && attempt < 2 && !control_.cancelled.load(); ++attempt)
+    {
+        if ((extra_refreshed = extra_client.refresh(extra, control_, extra_error)))
+            break;
+        hui::sys::log("[STORE] custom catalog attempt=%u error=%s", attempt + 1,
+                      extra_error.c_str());
+#ifdef STORE_DEBUG_TRACE
+        diag::trace("custom catalog attempt %u of 2: %s", attempt + 1, extra_error.c_str());
+#endif
+    }
     if (!control_.cancelled.load())
     {
         Update result;
-        result.kind = snapshot.verified ? Update::Kind::catalog : Update::Kind::error;
-        result.snapshot = snapshot;
-        result.message = refreshed ? "Catalog verified • Up to date" : "Offline • " + error;
+        result.kind = snapshot.accepted ? Update::Kind::catalog : Update::Kind::error;
+        result.snapshot = shown(snapshot);
+        result.message = refreshed ? (snapshot.verified ? "Catalog verified • Up to date"
+                                                        : "Signatures not checked • Up to date")
+                                   : "Offline • " + error;
+        if (!refreshed && snapshot.accepted && !snapshot.verified)
+            result.message = "Signatures not checked • " + result.message;
         hui::sys::log("[STORE] catalog verified=%d online=%d sequence=%llu apps=%zu",
                       snapshot.verified, refreshed,
                       static_cast<unsigned long long>(snapshot.manifest.sequence),
                       snapshot.entries.size());
+        if (additive && snapshot.accepted)
+            result.message += extra.accepted
+                                  ? (extra.verified ? " • Custom catalog added"
+                                                    : " • Custom catalog added, not checked")
+                                  : " • Custom catalog unavailable";
         publish(std::move(result));
+        if (additive && !control_.cancelled.load() && (!extra.accepted || !clashes.empty()))
+        {
+            // Said once: why the custom catalog, or some of it, isn't on the shelves.
+            Update notice;
+            notice.kind = Update::Kind::notice;
+            if (!extra.accepted)
+            {
+                notice.message = "Custom catalog not loaded";
+                notice.detail = extra_error.empty() ? "It could not be read." : extra_error;
+            }
+            else
+            {
+                notice.message =
+                    std::to_string(clashes.size()) +
+                    (clashes.size() == 1 ? " custom app hidden" : " custom apps hidden");
+                notice.detail = "homebrew.page lists the same title ID, and its app is the one "
+                                "shown: " +
+                                clashes.front() + (clashes.size() > 1 ? " and others." : ".");
+            }
+            publish(std::move(notice));
+        }
     }
     if (refreshed && check_updates && !control_.cancelled.load())
         check_store_update();
@@ -696,13 +761,31 @@ void Service::run()
                 save = true;
             }
         }
-        if (save && !root_.empty())
-            (void)hui::save::write_atomic(root_ + "/settings.txt", settings);
+        if (save)
+        {
+            const auto error = root_.empty()
+                                   ? "Store storage is unavailable"
+                                   : hui::save::write_atomic(root_ + "/settings.txt", settings);
+            if (!error.empty())
+            {
+                Update notice;
+                notice.kind = Update::Kind::notice;
+                notice.message = "Settings could not be saved";
+                notice.detail = error;
+                publish(std::move(notice));
+            }
+        }
         if (!id.empty())
         {
             Update result;
-            if (client.detail(snapshot, id, result.entry, control_, result.message))
+            // An app the official catalog doesn't list is the custom catalog's to describe.
+            const bool from_extra =
+                additive && std::none_of(snapshot.entries.begin(), snapshot.entries.end(),
+                                         [&](const auto &entry) { return entry.id == id; });
+            if (from_extra ? extra_client.detail(extra, id, result.entry, control_, result.message)
+                           : client.detail(snapshot, id, result.entry, control_, result.message))
             {
+                result.entry.extra = from_extra;
                 result.kind = Update::Kind::detail;
                 if (!result.entry.large_icon.empty())
                 {
@@ -722,13 +805,14 @@ void Service::run()
             else
                 result.entry.id = id;
             const bool verified_detail = result.kind == Update::Kind::detail;
+            const auto page = result.entry.page;
             publish(std::move(result));
             if (verified_detail)
             {
                 Update qr;
                 qr.kind = Update::Kind::qr;
                 qr.entry.id = id;
-                if (hui::encode_qr("https://homebrew.page/app/" + id + "/", qr.image))
+                if (catalog::api_url(page) && hui::encode_qr(page, qr.image))
                     publish(std::move(qr));
             }
         }
@@ -736,47 +820,23 @@ void Service::run()
     }
 }
 
-namespace
-{
-// The update check's transport has no context argument: one check at a time.
-net::Control *check_control = nullptr;
-int check_fetch(const char *url, const char *, char *body, std::size_t capacity,
-                std::size_t *length, int *http_status)
-{
-    std::string data;
-    const auto response = net::fetch(url, net::Purpose::catalog, capacity, data, *check_control);
-    *http_status = response.status;
-    *length = 0;
-    if (response.error == "The response exceeds its size limit")
-        return UPDATE_CHECK_FETCH_TOO_LARGE;
-    if (response.status == 0)
-        return -1;
-    if (data.size() > capacity)
-        return UPDATE_CHECK_FETCH_TOO_LARGE;
-    std::memcpy(body, data.data(), data.size());
-    *length = data.size();
-    return 0;
-}
-} // namespace
-
 // Once per launch, after the catalog: is a newer ProsperoStore listed? Any
 // failure means "unknown", and unknown shows nothing.
 void Service::check_store_update()
 {
-    if (version_.empty())
-        return;
-    update_check_result result{};
-    check_control = &control_;
-    update_check_run_with(check_fetch, "PPSA99000", version_.c_str(), &result);
-    check_control = nullptr;
-    hui::sys::log("[STORE] update check installed=%s state=%d reason=%s available=%s",
-                  version_.c_str(), static_cast<int>(result.state),
-                  update_check_reason_text(result.reason), result.available);
-    if (result.state != UPDATE_CHECK_AVAILABLE)
-        return;
     Update notice;
     notice.kind = Update::Kind::store_update;
-    notice.message = result.version;
+    {
+        std::lock_guard lock(mutex_);
+        const auto version = versions_.find("PPSA99000");
+        if (version == versions_.end() || !catalog::update_available(version_, version->second))
+            return;
+        const auto app = std::find_if(entries_.begin(), entries_.end(),
+                                      [](const auto &entry) { return entry.id == "PPSA99000"; });
+        if (app == entries_.end())
+            return;
+        notice.message = app->version;
+    }
     publish(std::move(notice));
 }
 
