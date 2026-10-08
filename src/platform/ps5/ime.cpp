@@ -67,7 +67,7 @@ Ime::~Ime()
         sceSysmoduleUnloadModule(module);
 }
 bool Ime::open(std::string_view title, std::string_view placeholder, std::string_view value,
-               std::size_t max_length)
+               std::size_t max_length, Enter enter)
 {
     if (active_)
         return false;
@@ -85,7 +85,7 @@ bool Ime::open(std::string_view title, std::string_view placeholder, std::string
         return false;
     utf16(title, title_);
     utf16(placeholder, placeholder_);
-    param.enter_label = 2;
+    param.enter_label = static_cast<int>(enter);
     param.max_text_length = std::min(max_length, buffer_.size() - 1);
     utf16(value, std::span(buffer_).first(param.max_text_length + 1));
     param.input_text_buffer = buffer_.data();

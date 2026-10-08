@@ -311,6 +311,14 @@ static void check_catalog_settings()
     assert(screen.settings().catalog_url == settings.catalog_url && screen.settings_changed);
     screen.set_catalog_url("http://bad/");
     assert(screen.settings().catalog_url == settings.catalog_url);
+    // As typed on the console: spaces around it, or no scheme.
+    screen.set_catalog_url("  dev.example/api/v1 \n");
+    assert(screen.settings().catalog_url == settings.catalog_url);
+    // The official address is not a custom catalog, and an empty answer changes nothing.
+    screen.set_catalog_url(catalog::kDefaultApi);
+    assert(screen.settings().catalog_url == settings.catalog_url);
+    screen.set_catalog_url("https://");
+    assert(screen.settings().catalog_url == settings.catalog_url && screen.settings().use_custom);
     assert(screen.settings().custom_active() && screen.settings().use_official); // both
     // Now the official catalog can be switched off (custom only), and on again.
     screen.update(up, 0.016f, feedback);

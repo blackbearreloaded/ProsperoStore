@@ -814,12 +814,15 @@ int main()
             keyboard_catalog = screen.pending_catalog_url;
             screen.pending_search = false;
             screen.pending_catalog_url = false;
-            keyboard_active = keyboard_catalog
-                                  ? keyboard.open("Catalog API URL",
-                                                  "HTTPS API directory; empty restores default",
-                                                  screen.settings().catalog_url, 512)
-                                  : keyboard.open("Search ProsperoStore", "App name or developer",
-                                                  screen.query());
+            keyboard_active =
+                keyboard_catalog
+                    ? keyboard.open("Custom catalog URL", "https://example.com/api/v1/",
+                                    screen.settings().catalog_url == store::catalog::kDefaultApi
+                                        ? std::string("https://")
+                                        : screen.settings().catalog_url,
+                                    512, ps5::Ime::Enter::go)
+                    : keyboard.open("Search ProsperoStore", "App name or developer",
+                                    screen.query());
             sys::log("[STORE] keyboard open=%d", keyboard_active ? 1 : 0);
             if (!keyboard_active)
             {
@@ -842,11 +845,18 @@ int main()
             if (state == ps5::Ime::State::accepted)
             {
                 if (keyboard_catalog)
+                {
                     screen.set_catalog_url(keyboard.text());
+                    sys::log("[STORE] custom catalog url=%s active=%d",
+                             screen.settings().catalog_url.c_str(),
+                             screen.settings().custom_active() ? 1 : 0);
+                }
                 else
                     screen.set_query(keyboard.text());
             }
-            else if (state == ps5::Ime::State::failed)
+            else if (keyboard_catalog && state != ps5::Ime::State::open)
+                screen.catalog_url_cancelled(); // closed without an address
+            if (state == ps5::Ime::State::failed)
                 screen.notify("Keyboard closed",
                               "The system keyboard closed unexpectedly. Please try again.");
             if (state != ps5::Ime::State::open)

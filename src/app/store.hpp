@@ -148,6 +148,9 @@ class Screen
     bool settings_changed = false; // the frame loop saves them and clears this
     bool pending_catalog_url = false;
     void set_catalog_url(std::string_view value);
+    // The address keyboard was closed without an answer: a custom catalog that was just
+    // switched on, and has no address, goes off again.
+    void catalog_url_cancelled();
     // The scanned folders apps can be installed to, with the room in each.
     void set_locations(std::vector<std::pair<std::string, std::uint64_t>> locations);
     // The running store: its title and the version it was built as.

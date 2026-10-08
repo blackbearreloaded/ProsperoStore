@@ -27,8 +27,14 @@ class Ime
     Ime(const Ime &) = delete;
     Ime &operator=(const Ime &) = delete;
     ~Ime();
+    // What the keyboard's Enter key says.
+    enum class Enter
+    {
+        search = 2,
+        go = 3
+    };
     bool open(std::string_view title, std::string_view placeholder, std::string_view value,
-              std::size_t max_length = 39);
+              std::size_t max_length = 39, Enter enter = Enter::search);
     State poll();
     void close();
     const std::string &text() const

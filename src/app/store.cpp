@@ -2962,18 +2962,48 @@ Settings parse_settings(std::string_view text)
     return settings;
 }
 
+void Screen::catalog_url_cancelled()
+{
+    if (settings_.use_custom && settings_.catalog_url == catalog::kDefaultApi)
+    {
+        settings_.use_custom = false;
+        settings_.use_official = true;
+        settings_changed = true;
+        notify("Custom catalog is off", "No address was entered.");
+    }
+}
+
 void Screen::set_catalog_url(std::string_view value)
 {
+    // As it was typed: spaces and line ends around it go, and a bare host gets https://.
+    const auto blank = [](char c) { return static_cast<unsigned char>(c) <= 32; };
+    while (!value.empty() && blank(value.front()))
+        value.remove_prefix(1);
+    while (!value.empty() && blank(value.back()))
+        value.remove_suffix(1);
+    std::string typed(value);
+    if (typed.empty() || typed == "https://")
+        return catalog_url_cancelled();
+    if (typed.find("://") == typed.npos)
+        typed = "https://" + typed;
     std::string url;
-    if (!catalog::normalize_api(value, url))
+    if (!catalog::normalize_api(typed, url))
     {
-        notify("Invalid catalog URL",
-               "Enter an HTTPS API directory, such as https://homebrew.page/api/v1/.");
-        return;
+        notify("Not a catalog address",
+               "Use an HTTPS address such as https://example.com/api/v1/. Nothing was changed.");
+        return catalog_url_cancelled();
+    }
+    if (url == catalog::kDefaultApi)
+    {
+        // The official address is the Official catalog switch, not a custom catalog.
+        notify("That is the official catalog",
+               "Enter your own feed's address. homebrew.page has its own switch.");
+        return catalog_url_cancelled();
     }
     settings_.catalog_url = std::move(url);
+    settings_.use_custom = true;
     settings_changed = true;
-    notify("Catalog settings saved", "Close and reopen ProsperoStore to use this feed.");
+    notify("Custom catalog saved", settings_.catalog_url + " - close and reopen the store.");
 }
 
 void Screen::set_locations(std::vector<std::pair<std::string, std::uint64_t>> locations)
@@ -3237,7 +3267,8 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         settings_.verify_signatures = true;
         settings_.use_official = true;
         settings_.use_custom = false;
-        set_catalog_url(catalog::kDefaultApi);
+        settings_.catalog_url = catalog::kDefaultApi;
+        notify("Official catalog restored", "Close and reopen ProsperoStore to apply.");
     }
     else
     {
