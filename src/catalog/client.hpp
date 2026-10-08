@@ -55,6 +55,9 @@ class Client
         // Keep the official signed cache and its rollback record across upgrades.
         if (!cache_.empty() && (api_ != kDefaultApi || !verify_))
             cache_ += "-" + sha256(api_ + (verify_ ? "\nsigned" : "\nunsigned"));
+        origins_.push_back(api_);
+        if (api_ == kDefaultApi && verify_)
+            origins_.push_back(std::string(kApiMirror) + "api/v1/");
     }
     bool cached(Snapshot &out, std::string &error);
     bool refresh(Snapshot &out, net::Control &control, std::string &error);
@@ -71,5 +74,10 @@ class Client
     std::string cache_;
     std::string api_;
     bool verify_ = true;
+    // The place that last answered with files that verified: asked first for the next file.
+    std::size_t origin_ = 0;
+    // Where this catalog is asked for, in order. The official, signed catalog also has
+    // its mirror; a custom catalog has only its own address.
+    std::vector<std::string> origins_;
 };
 } // namespace store::catalog

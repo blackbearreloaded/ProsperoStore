@@ -5,6 +5,7 @@
 #include <set>
 #include "catalog/client.hpp"
 #include "core/save_file.hpp"
+#include <array>
 #include <fcntl.h>
 #include <cerrno>
 #include <sys/stat.h>
@@ -82,19 +83,33 @@ bool Client::file(const Manifest &manifest, const std::string &name, std::size_t
         error = "The offline catalog is incomplete";
         return false;
     }
-    const auto response = net::fetch(api_ + name, net::Purpose::catalog, limit, body, *control);
-    if (!response.ok())
+    // The two places hold different bytes for the same name (see origins_), so the manifest
+    // decides which answer belongs to it. The first failure is the one reported: it is the
+    // main site's unless the mirror was already in use.
+    std::string first_error;
+    for (std::size_t attempt = 0; attempt < origins_.size(); ++attempt)
     {
-        error = response.error;
-        return false;
+        const auto index = (origin_ + attempt) % origins_.size();
+        std::string candidate;
+        const auto response =
+            net::fetch(origins_[index] + name, net::Purpose::catalog, limit, candidate, *control);
+        std::string failure = response.ok() ? std::string{} : response.error;
+        if (failure.empty() && !manifest.verifies(name, candidate))
+            failure = "The catalog file could not be verified";
+        if (failure.empty())
+        {
+            body = std::move(candidate);
+            origin_ = index;
+            error = cache_.empty() ? std::string{} : hui::save::write_atomic(path, body);
+            return error.empty();
+        }
+        if (first_error.empty())
+            first_error = std::move(failure);
+        if (control->cancelled.load())
+            break;
     }
-    if (!manifest.verifies(name, body))
-    {
-        error = "The catalog file could not be verified";
-        return false;
-    }
-    error = cache_.empty() ? std::string{} : hui::save::write_atomic(path, body);
-    return error.empty();
+    error = std::move(first_error);
+    return false;
 }
 
 bool Client::manifest(const std::string &bundle, std::uint64_t highest, Manifest &out,
@@ -174,29 +189,44 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
         }
         highest = previous.sequence;
     }
-    std::string body, signature;
-    auto response =
-        net::fetch(api_ + "manifest.json", net::Purpose::catalog, kVersionsLimit, body, control);
-    if (!response.ok())
-    {
-        error = response.error;
-        return false;
-    }
-    if (verify_)
-    {
-        response = net::fetch(api_ + "manifest.sig", net::Purpose::catalog, 64, signature, control);
-        if (!response.ok())
-        {
-            error = response.error;
-            return false;
-        }
-    }
-    else
-        signature.assign(64, '\0'); // Same bundle layout, isolated from every signed cache.
+    // The main site first, every time; the mirror when the main site can't be reached or
+    // answers with something that isn't the signed catalog (a network's block page, say).
     Snapshot next;
-    const std::string bundle = signature + body;
-    if (!parse(bundle, highest, next, &control, error))
+    std::string bundle, first_error;
+    bool loaded = false;
+    for (std::size_t index = 0; index < origins_.size() && !loaded; ++index)
+    {
+        std::string body, signature, failure;
+        auto response = net::fetch(origins_[index] + "manifest.json", net::Purpose::catalog,
+                                   kVersionsLimit, body, control);
+        if (response.ok() && verify_)
+            response = net::fetch(origins_[index] + "manifest.sig", net::Purpose::catalog, 64,
+                                  signature, control);
+        else if (response.ok())
+            signature.assign(64, '\0'); // Same bundle layout, isolated from every signed cache.
+        if (!response.ok())
+            failure = response.error;
+        else
+        {
+            origin_ = index;
+            bundle = signature + body;
+            Snapshot candidate;
+            if (parse(bundle, highest, candidate, &control, failure))
+            {
+                next = std::move(candidate);
+                loaded = true;
+            }
+        }
+        if (!loaded && first_error.empty())
+            first_error = std::move(failure);
+        if (control.cancelled.load())
+            break;
+    }
+    if (!loaded)
+    {
+        error = std::move(first_error);
         return false;
+    }
     if (cache_.empty())
     {
         out = std::move(next);
