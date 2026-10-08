@@ -506,8 +506,8 @@
       "src/core/image.hpp": "ffb5586197d5bccb8b77c6d005c621c8aa7f8386d29395cae842924fc0d4bd91",
       "third_party/stb/IMAGE_SOURCE.json": "7ee4888fdf8b9ff210b595ec44f31230f4b2261c5f40dda3f7b47a9016868a5a",
       "third_party/stb/stb_image.h": "594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3",
-      "src/platform/ps5/ime.cpp": "36de323b231ab334fb6043dc483f0072c3520baadbc7d5d20b2360646c412153",
-      "src/platform/ps5/ime.hpp": "a1eb842605189a8667c2b918f794e02d76bbdc74fe3cef856caba0f50ebc70be",
+      "src/platform/ps5/ime.cpp": "88e54d36d8b584917f5529693a5a2a9d35c6fe0ec5675d31153de6841662f819",
+      "src/platform/ps5/ime.hpp": "7f9bfd6f102bdefd8f0675dbab2472ae58020ea9d39060251f69d2d6d7b89a62",
       "src/platform/ps5/ime_abi.hpp": "6f65e52e2c2822a5ea8f1077155d7f1897a39e30afbb06fbfa8778b3c4172932",
       "src/core/qr.cpp": "2a0b294ab4908d09554cd7a58aced2a02c2638d0160c5517c124e2515d1bcb71",
       "src/core/qr.hpp": "385fb7e6eb380022619baaf65b9e9ade6a4f1f0f381a573433fbbe035711431f",
@@ -515,6 +515,10 @@
       "src/third_party/qrcodegen/qrcodegen.h": "e82df4bff37d18b5863b9e7486fe6bda1b6cda8c3b9ecebfec473907265cb589",
       "third_party/qrcodegen/SOURCE.json": "8c71dc716a28f5b9d3242110824efaaeff89483d9994413f90c125091c01f6f7",
       "src/core/held_step.hpp": "0ef176e4fb308a184c74fff82364528fa334f43964073af0d93abe46bc0a6503"
+    },
+    "local_changes": {
+      "src/platform/ps5/ime.cpp": "Allow a caller-selected input length for catalog URLs; the default search limit stays 39 characters.",
+      "src/platform/ps5/ime.hpp": "Extend the native keyboard buffer to 512 characters plus terminator for catalog URL entry."
     }
   }
 ]

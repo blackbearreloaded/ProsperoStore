@@ -6,6 +6,7 @@
 #include "platform/ps5/system.hpp"
 #include "gfx/font.hpp"
 #include <span>
+#include <algorithm>
 
 namespace hui::ps5
 {
@@ -65,7 +66,8 @@ Ime::~Ime()
     if (loaded_ && !active_)
         sceSysmoduleUnloadModule(module);
 }
-bool Ime::open(std::string_view title, std::string_view placeholder, std::string_view value)
+bool Ime::open(std::string_view title, std::string_view placeholder, std::string_view value,
+               std::size_t max_length)
 {
     if (active_)
         return false;
@@ -83,9 +85,9 @@ bool Ime::open(std::string_view title, std::string_view placeholder, std::string
         return false;
     utf16(title, title_);
     utf16(placeholder, placeholder_);
-    utf16(value, buffer_);
     param.enter_label = 2;
-    param.max_text_length = buffer_.size() - 1;
+    param.max_text_length = std::min(max_length, buffer_.size() - 1);
+    utf16(value, std::span(buffer_).first(param.max_text_length + 1));
     param.input_text_buffer = buffer_.data();
     param.horizontal_alignment = param.vertical_alignment = 1;
     param.placeholder = placeholder_.data();

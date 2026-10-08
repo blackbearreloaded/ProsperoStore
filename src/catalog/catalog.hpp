@@ -28,6 +28,12 @@ inline constexpr std::string_view kApi = "https://homebrew.page/api/v1/";
 inline constexpr std::string_view kApiMirror =
     "https://blackbearreloaded.github.io/ps5-homebrew-catalog/";
 bool api_url(std::string_view url);
+// One of the official catalog's own places: homebrew.page, or its mirror (one repository's
+// pages on a host shared with everyone's, so the path is part of its identity).
+bool official_url(std::string_view url);
+inline constexpr const char *kDefaultApi = "https://homebrew.page/api/v1/";
+// Empty input restores the official API; otherwise require an HTTPS directory URL.
+bool normalize_api(std::string_view value, std::string &out);
 bool artifact_url(std::string_view url, bool redirected = false);
 std::string sha256(std::string_view bytes);
 bool hex_bytes(std::string_view text, std::span<std::uint8_t> bytes);
@@ -38,6 +44,9 @@ struct Entry
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
     std::uint64_t size = 0;
+    // Not from the catalog's files: set by the store on entries that come from the custom
+    // catalog shown beside the official one.
+    bool extra = false;
     // What the catalog's scan of the release file found. Advice, not a guarantee: the scan reads
     // the file and can miss things. Empty strings mean "not known", never "stays".
     std::string sandbox;       // "stays", "leaves", "unclear"
@@ -76,6 +85,8 @@ using PublicKey = std::array<std::uint8_t, 32>;
 std::array<PublicKey, 2> public_keys();
 bool verify_manifest(std::string_view body, std::string_view signature, std::uint64_t highest,
                      std::span<const PublicKey> keys, Manifest &out, std::string &error);
+bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out,
+                    std::string &error);
 bool parse_index(std::string_view body, std::vector<Entry> &out, std::string &error);
 bool parse_detail(std::string_view body, std::string_view expected, Entry &out, std::string &error);
 bool parse_versions(std::string_view body, std::map<std::string, std::string> &out,

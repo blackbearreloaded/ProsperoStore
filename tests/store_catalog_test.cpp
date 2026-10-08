@@ -2,6 +2,7 @@
 // Copyright (C) 2026 BlackBearReloaded
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include "catalog/client.hpp"
 #include "catalog/catalog.hpp"
 #include "third_party/monocypher/monocypher-ed25519.h"
 
@@ -20,10 +21,25 @@ int main()
     assert(!update_available("1.000.000", "01.000.000"));
     assert(sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     assert(api_url("https://homebrew.page/api/v1/index.json"));
+    std::string base = "unchanged";
+    assert(normalize_api(" https://dev.example:8443/api/v1 ", base));
+    assert(base == "https://dev.example:8443/api/v1/");
+    assert(normalize_api("", base) && base == kDefaultApi);
+    for (const auto *bad :
+         {"http://dev.example/api/v1/", "file:///tmp/feed/", "https://user@dev.example/api/",
+          "https://dev.example:0/api/", "https://dev.example:65536/api/",
+          "https://dev.example:/api/", "https://dev.example/api/?q=x", "https://dev.example/api/#x",
+          "https://dev.example/api/\nverify_signatures=0"})
+    {
+        assert(!normalize_api(bad, base));
+        assert(base == kDefaultApi);
+    }
+    assert(!normalize_api("https://dev.example/" + std::string(512, 'a'), base));
     // The mirror is one path on a shared host: nothing else on that host is the catalog.
-    assert(api_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/index.json"));
-    assert(api_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/icons/"
-                   "PPSA99000.png?v=0f"));
+    assert(
+        official_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/index.json"));
+    assert(official_url("https://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/icons/"
+                        "PPSA99000.png?v=0f"));
     for (const char *url :
          {"https://blackbearreloaded.github.io/",
           "https://blackbearreloaded.github.io/other-repo/api/v1/index.json",
@@ -32,7 +48,7 @@ int main()
           "https://blackbearreloaded.github.io/ps5-homebrew-catalog/%2e%2e/x",
           "https://blackbearreloaded.github.io.evil.example/ps5-homebrew-catalog/a",
           "http://blackbearreloaded.github.io/ps5-homebrew-catalog/api/v1/index.json"})
-        assert(!api_url(url));
+        assert(!official_url(url));
     assert(artifact_url("https://github.com/owner/repo/releases/download/v1/a.zip"));
     assert(!artifact_url("https://release-assets.githubusercontent.com/a"));
     assert(artifact_url("https://release-assets.githubusercontent.com/a", true));
@@ -78,6 +94,8 @@ int main()
     assert(labelled[0].sandbox == "stays" && labelled[1].sandbox.empty());
     auto bad_icon = full_icon;
     bad_icon.replace(bad_icon.find("https://homebrew.page"), 21, "https://untrusted.example");
+    assert(parse_detail(bad_icon, "PPSA99000", detail, error)); // Custom HTTPS icon host.
+    bad_icon.replace(bad_icon.find("https://"), 8, "http://");
     assert(!parse_detail(bad_icon, "PPSA99000", detail, error));
     std::map<std::string, std::string> versions;
     assert(parse_versions(R"({"schema":3,"apps":{"PPSA99000":{"content_version":null}}})", versions,
@@ -108,5 +126,35 @@ int main()
     signature[0] ^= 1;
     assert(!verify_manifest(manifest, signature, 0, keys, verified, error));
     assert(verified.sequence == 8);
+    {
+        // A custom catalog beside the official one only adds: a shared title ID stays official.
+        using store::catalog::Entry;
+        using store::catalog::Snapshot;
+        Snapshot official, custom;
+        official.accepted = custom.accepted = true;
+        Entry store_app, game, mine, fake;
+        store_app.id = "PPSA99000";
+        store_app.name = "ProsperoStore";
+        game.id = "PPSA99001";
+        mine.id = "PPSA12345";
+        mine.name = "Mine";
+        fake.id = "PPSA99000";
+        fake.name = "Not the store";
+        official.entries = {store_app, game};
+        official.versions = {{"PPSA99000", "01.000.040"}};
+        custom.entries = {fake, mine};
+        custom.versions = {{"PPSA99000", "09.000.000"}, {"PPSA12345", "01.000.000"}};
+        std::vector<std::string> clashes;
+        const auto both = store::catalog::with_extra(official, custom, &clashes);
+        assert(both.entries.size() == 3 && both.entries[0].name == "ProsperoStore" &&
+               !both.entries[0].extra && both.entries[2].id == "PPSA12345" &&
+               both.entries[2].extra);
+        assert(both.versions.at("PPSA99000") == "01.000.040" &&
+               both.versions.at("PPSA12345") == "01.000.000");
+        assert(clashes.size() == 1 && clashes[0] == "PPSA99000");
+        // A custom catalog that wasn't accepted adds nothing.
+        custom.accepted = false;
+        assert(store::catalog::with_extra(official, custom, &clashes).entries.size() == 2);
+    }
     std::cout << "Catalog trust and parser checks passed\n";
 }

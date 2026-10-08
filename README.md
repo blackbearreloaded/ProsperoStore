@@ -13,7 +13,7 @@
 </p>
 
 > [!TIP]
-> **Every app in ProsperoStore comes from [homebrew.page](https://homebrew.page)**, the community
+> **By default, ProsperoStore uses [homebrew.page](https://homebrew.page)**, the community
 > catalog of PS5 homebrew. Browse it on the web at **[homebrew.page](https://homebrew.page)**, then
 > install from the console with one button. The catalog is signed, and every download is checked
 > against it before anything touches your console.
@@ -149,6 +149,45 @@ Send one of these with your report:
 Say which console and firmware you have, your ShadowMountPlus version and your payload loader.
 The log holds no account details or passwords. Switch **Debug log** off again afterwards: while
 it is on, the store starts a little slower.
+
+## Custom catalogs
+
+**Settings → Development options** has two switches, one for each source:
+
+- **Official catalog** - homebrew.page, always signature-checked. On by default.
+- **Custom catalog** - your own feed. Switching it on asks for its address when none is set.
+
+With both on, the custom catalog's apps are added to homebrew.page's and carry a "Custom catalog"
+mark on their page. Where both list the same title ID, the official app is the one shown, and the
+store says how many custom apps were hidden. With only the custom catalog on, it replaces the
+official one, which is what you want to test a new version of an app that is already listed. The
+store needs one catalog, so the official one can only be switched off while a custom one is in
+use.
+
+**Custom catalog URL** is the HTTPS directory containing the feed, for example
+`https://example.com/api/v1/`: the API directory, not the website homepage, a GitHub repository
+URL or `index.json`. **Restore official catalog** goes back to homebrew.page alone. Changes are
+saved at once and apply when you close and reopen ProsperoStore.
+
+**Verify custom catalog signatures** is on by default and uses the official catalog's built-in
+public keys, so it suits a copy of the signed official feed. For an independently published feed
+you can turn it off after confirming the warning; the store then labels the catalog **Signatures
+not checked**. Only do this with a publisher you trust: hashes detect changed downloads, but an
+unchecked publisher controls both the download address and its expected hash.
+
+Custom feeds must implement the [catalog API](https://github.com/blackbearreloaded/ps5-homebrew-catalog/blob/main/docs/api.md):
+schema-3 `manifest.json`, `index.json`, `versions.json`, and `apps/<TITLEID>.json`.
+The manifest must list the SHA-256 of each API JSON file. `manifest.sig` is required
+only while signature verification is on. API-file hashes, artifact hashes, ZIP
+validation, HTTPS certificate checks, and the existing GitHub release download
+policy remain enforced. Plain HTTP, self-signed TLS certificates, arbitrary JSON
+lists, and downloads from non-GitHub artifact hosts are not supported.
+
+Each API URL and signature mode has its own catalog cache. Re-enabling verification
+never reuses an unchecked catalog; the official signed catalog retains its saved
+rollback protection. Signature checks off also disables sequence rollback checks,
+so development feeds can rebuild with a lower sequence. Store update notices use
+the selected catalog, and app QR codes use its `page` URLs.
 
 ## Known limits of this version
 

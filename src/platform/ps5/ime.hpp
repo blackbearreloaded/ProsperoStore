@@ -27,7 +27,8 @@ class Ime
     Ime(const Ime &) = delete;
     Ime &operator=(const Ime &) = delete;
     ~Ime();
-    bool open(std::string_view title, std::string_view placeholder, std::string_view value);
+    bool open(std::string_view title, std::string_view placeholder, std::string_view value,
+              std::size_t max_length = 39);
     State poll();
     void close();
     const std::string &text() const
@@ -36,8 +37,8 @@ class Ime
     }
 
   private:
-    // Matches the input limit used by ProsperoRadio's console-tested dialog.
-    std::array<std::uint16_t, 40> buffer_{};
+    // Search keeps its original limit; catalog URLs need a longer field.
+    std::array<std::uint16_t, 513> buffer_{};
     std::array<std::uint16_t, 64> title_{};
     std::array<std::uint16_t, 128> placeholder_{};
     std::string value_;

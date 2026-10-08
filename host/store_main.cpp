@@ -275,6 +275,81 @@ static void check_hold_to_uninstall()
     assert(!store::parse_settings("location=/data/homebrew\n").reduce_motion);
 }
 
+static void check_catalog_settings()
+{
+    using namespace store;
+    assert(parse_settings("").verify_signatures);
+    Settings settings;
+    settings.catalog_url = "https://dev.example/api/v1/";
+    settings.verify_signatures = false;
+    const auto saved = parse_settings(format_settings(settings));
+    assert(saved.catalog_url == settings.catalog_url && !saved.verify_signatures);
+    assert(parse_settings("catalog_url=http://bad/\nverify_signatures=oops\n").verify_signatures);
+    assert(parse_settings("catalog_url=http://bad/\n").catalog_url == catalog::kDefaultApi);
+    Screen screen;
+    screen.open_panel(1);
+    hui::ui::Feedback feedback;
+    hui::InputFrame down, up, confirm, back, right;
+    down.nav = hui::Direction::down;
+    up.nav = hui::Direction::up;
+    right.nav = hui::Direction::right;
+    confirm.pressed = hui::action_bit(hui::Action::confirm);
+    back.pressed = hui::action_bit(hui::Action::back);
+    for (int i = 0; i < 7; ++i)
+        screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback); // Development options: Official catalog.
+    // The official catalog can't go while no custom one is in use.
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().use_official && !screen.settings().use_custom);
+    // Custom catalog on: with no address yet, the store asks for one.
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().use_custom && screen.pending_catalog_url);
+    assert(screen.settings().use_official); // not active yet: the official one stays
+    screen.pending_catalog_url = false;
+    screen.set_catalog_url("https://dev.example/api/v1");
+    assert(screen.settings().catalog_url == settings.catalog_url && screen.settings_changed);
+    screen.set_catalog_url("http://bad/");
+    assert(screen.settings().catalog_url == settings.catalog_url);
+    assert(screen.settings().custom_active() && screen.settings().use_official); // both
+    // Now the official catalog can be switched off (custom only), and on again.
+    screen.update(up, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(!screen.settings().use_official);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().use_official);
+    // The address row asks again.
+    screen.update(down, 0.016f, feedback);
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.pending_catalog_url);
+    screen.pending_catalog_url = false;
+    // Signature checks: asking is not consent.
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().verify_signatures);
+    screen.update(back, 0.016f, feedback);
+    assert(screen.settings().verify_signatures);
+    screen.update(confirm, 0.016f, feedback);
+    screen.update(right, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(!screen.settings().verify_signatures);
+    // Restore: the official catalog alone, checked.
+    screen.update(down, 0.016f, feedback);
+    screen.update(confirm, 0.016f, feedback);
+    assert(screen.settings().verify_signatures && screen.settings().catalog_url == catalog::kDefaultApi);
+    assert(screen.settings().use_official && !screen.settings().use_custom);
+    // The two switches survive the settings file, and a file can't switch both off.
+    Settings both;
+    both.catalog_url = "https://dev.example/api/v1/";
+    both.use_custom = true;
+    both.use_official = false;
+    const auto kept = parse_settings(format_settings(both));
+    assert(kept.use_custom && !kept.use_official && kept.custom_active());
+    assert(parse_settings("use_official=0\nuse_custom=0\n").use_official);
+    assert(parse_settings("use_official=0\nuse_custom=1\n").use_official); // no address: not active
+}
+
 int main(int argc, char **argv)
 {
     check_artwork_requests();
@@ -282,6 +357,7 @@ int main(int argc, char **argv)
     check_installed_sections();
     check_hold_to_uninstall();
     check_keyboard_keys();
+    check_catalog_settings();
     if (argc < 3 || argc > 5)
         return 2;
     const auto get_display = reinterpret_cast<PFNEGLGETPLATFORMDISPLAYEXTPROC>(
@@ -312,6 +388,22 @@ int main(int argc, char **argv)
         if (!renderer.init() || !fonts.load(renderer, argv[1]) || !target.create(1920, 1080, 1))
             return 5;
         store::Screen screen;
+        // Settings previews do not need a live catalog or cached downloads.
+        if (argc == 4 && (std::string(argv[3]) == "settings" || std::string(argv[3]) == "catalog-settings"))
+        {
+            screen.open_panel(1);
+            hui::ui::Feedback quiet;
+            hui::InputFrame down;
+            down.nav = hui::Direction::down;
+            if (std::string(argv[3]) == "catalog-settings")
+            {
+                for (int i = 0; i < 7; ++i)
+                    screen.update(down, 0.016f, quiet);
+                hui::InputFrame confirm;
+                confirm.pressed = hui::action_bit(hui::Action::confirm);
+                screen.update(confirm, 0.016f, quiet);
+            }
+        }
         std::vector<GLuint> textures;
         {
             std::string encoded;
@@ -324,7 +416,7 @@ int main(int argc, char **argv)
                 screen.set_coming_soon_art(textures.back());
             }
         }
-        if (argc >= 4)
+        if (argc >= 4 && std::string(argv[3]) != "settings" && std::string(argv[3]) != "catalog-settings")
         {
             store::catalog::Client catalog(argv[3]);
             store::catalog::Snapshot snapshot;

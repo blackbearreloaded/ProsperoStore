@@ -64,6 +64,14 @@ int main()
     calls.clear();
     assert(!fetch(url, Purpose::artifact, 100, body, control, "bad\r\nheader").ok() &&
            calls.empty());
+    responses = {reply(302, "/api/v1/index.json"), reply(200)};
+    assert(fetch("https://dev.example:8443/feed/", Purpose::catalog, 100, body, control).ok());
+    assert(calls.back() == "https://dev.example:8443/api/v1/index.json");
+    calls.clear();
+    responses = {reply(302, "http://dev.example/api/v1/index.json")};
+    assert(!fetch("https://dev.example/feed/", Purpose::catalog, 100, body, control).ok());
+    assert(calls.size() == 1);
+    calls.clear();
     control.cancelled.store(true);
     assert(!fetch(url, Purpose::artifact, 100, body, control).ok() && calls.empty());
 }
