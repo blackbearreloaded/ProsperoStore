@@ -140,13 +140,10 @@ bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &o
     }
     if (recursive)
         candidate.depth = 2;
-    if (scan_lines != 0 && candidate.roots.empty())
-    {
-        // Custom scan paths replace the built-in ones, and none could be read: where
-        // ShadowMountPlus looks is unknown, so nothing is installed.
-        error = "No ShadowMount scan path could be read (" + candidate.ignored.front() + ")";
-        return false;
-    }
+    // Scan paths were set and none could be read: the store goes on with the built-in
+    // folders, which is where ShadowMountPlus looks when it has no usable path either, and
+    // says so. Refusing every install helped nobody.
+    candidate.fell_back = scan_lines != 0 && candidate.roots.empty();
     if (candidate.roots.empty())
     {
         candidate.roots = {"/data/homebrew", "/data/etaHEN/games"};

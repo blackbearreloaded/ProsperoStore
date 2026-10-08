@@ -25,6 +25,7 @@ struct Update
         inventory,
         notice,       // message is its title, detail its body
         store_update, // a newer ProsperoStore is listed: message is its version
+        setup,        // what to check in ShadowMountPlus's settings: detail, one per line
         job,          // a finished install, update or uninstall: entry.id, ok, message, detail
         locations,    // where apps can be installed on this console
         error
@@ -113,7 +114,8 @@ class Service
     void publish(Update update);
     void check_store_update();
     bool enqueue(Job job);
-    bool load_policy(system::ScanPolicy &policy) const;
+    // notes: what the user should check in ShadowMountPlus's settings, in plain words.
+    bool load_policy(system::ScanPolicy &policy, std::vector<std::string> *notes = nullptr) const;
     std::string root_, version_;
     net::Control control_;
     net::Control icon_control_;

@@ -233,6 +233,20 @@ void Screen::notify(std::string title, std::string body)
     toasts_.push(ui::StatusKind::info, std::move(title), std::move(body), 10.0f);
 }
 
+void Screen::set_setup_notes(std::vector<std::string> notes)
+{
+    setup_notes_ = std::move(notes);
+    write_about();
+    if (setup_notes_.empty())
+        return;
+    const auto more = setup_notes_.size() - 1;
+    toasts_.push(ui::StatusKind::warning, "Check your ShadowMountPlus settings",
+                 more == 0 ? "Press Options and open About to see what the store found."
+                           : std::to_string(setup_notes_.size()) +
+                                 " things to check: press Options and open About.",
+                 12.0f);
+}
+
 void Screen::offer_store_update(std::string version)
 {
     if (store_offer_ != StoreOffer::none)
@@ -2954,6 +2968,16 @@ void Screen::write_about()
 {
     using Block = ui::TextBlock;
     std::vector<Block> blocks;
+    if (!setup_notes_.empty())
+    {
+        // What the store found in /data/shadowmount and what it did about it.
+        blocks.push_back(Block::heading("ShadowMountPlus settings to check", 3));
+        blocks.push_back(Block::paragraph(
+            "Found in /data/shadowmount/config.ini and manual.lst. The store keeps working "
+            "where it says so; fixing the lines removes this note."));
+        for (const auto &line : setup_notes_)
+            blocks.push_back(Block::bullet(line));
+    }
     if (!debug_lines_.empty())
     {
         // The debug build: what happened at each step, to photograph or send.

@@ -450,6 +450,23 @@ int main()
                 screen.notify(std::move(update.message), std::move(update.detail));
             else if (update.kind == store::Update::Kind::store_update)
                 screen.offer_store_update(std::move(update.message));
+            else if (update.kind == store::Update::Kind::setup)
+            {
+                std::vector<std::string> notes;
+                std::size_t at = 0;
+                while (at < update.detail.size())
+                {
+                    const auto end = std::min(update.detail.find('\n', at), update.detail.size());
+                    if (end > at)
+                        notes.push_back(update.detail.substr(at, end - at));
+                    at = end + 1;
+                }
+#ifdef STORE_DEBUG_TRACE
+                for (const auto &line : notes)
+                    store::diag::trace("ShadowMountPlus settings to check: %s", line.c_str());
+#endif
+                screen.set_setup_notes(std::move(notes));
+            }
             else if (update.kind == store::Update::Kind::job)
             {
                 // The update helper waits for the store to close: say so, then close.

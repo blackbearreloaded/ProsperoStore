@@ -142,6 +142,8 @@ class Screen
         debug_file_ = std::move(file);
         write_about();
     }
+    // What to check in ShadowMountPlus's settings: a notice now, the whole list in About.
+    void set_setup_notes(std::vector<std::string> notes);
     void set_self(std::string id, std::string version)
     {
         self_id_ = std::move(id);
@@ -300,6 +302,7 @@ class Screen
     void draw_panel(const hui::ui::Fonts &fonts, std::uint32_t glass);
     void write_about();
     std::vector<std::string> debug_lines_;
+    std::vector<std::string> setup_notes_;
     std::string debug_file_;
     const App *self_app() const;
     std::string time_left() const;
