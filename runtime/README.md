@@ -23,8 +23,8 @@ sha256sum -c libc.prx.sha256
 ```
 
 The generated file is ignored by Git. Bare `make` also creates it as part of a
-normal application build. Tagged GitHub Releases provide the verified binary
-as a convenience asset.
+normal application build. Tagged GitHub Releases do not carry it as a file of
+its own: the verified binary is inside the app-folder ZIP, beside `eboot.bin`.
 
 The complete source, reproduction procedure, and compatibility scope are in
 [`tooling/native`](../tooling/native) and

@@ -5,8 +5,8 @@ Every application or package build creates and validates
 `-OutputFormat` selections:
 
 All formats remain available for local development. Tagged GitHub Releases
-attach the complete compressed `.ffpfsc` image, a ZIP of the validated
-directory-style application, and their shared `SHA256SUMS`.
+attach a ZIP of the validated directory-style application and its
+`SHA256SUMS`, and nothing else.
 
 | Make target / selection | Additional output | Packaging tool |
 | --- | --- | --- |

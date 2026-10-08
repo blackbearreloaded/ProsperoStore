@@ -1,15 +1,18 @@
-# ps5-native-app-boilerplate - Lint, build, and release validation.
+# ProsperoStore - Lint, test, build the release ZIP, and publish it for a version tag.
 # Copyright (C) 2026 BlackBearReloaded
 # SPDX-License-Identifier: GPL-3.0-or-later
-
 name: Build
 
+# A pull request, a version tag or a run started by hand is linted, tested and built. A tag
+# "v1.000.040" (for contentVersion "01.000.040" in sce_sys/param.json) also publishes a
+# pre-release with the app-folder ZIP and its checksum. The ZIP is the only release file, and
+# every entry in it is stored with permissions 0777: the console only starts an app whose
+# files are open to all.
 on:
+  # A build on main is started by hand (Run workflow): pushes to main build nothing.
   push:
-    branches:
-      - main
     tags:
-      - "[0-9][0-9].[0-9][0-9][0-9].[0-9][0-9][0-9]"
+      - "v[0-9]*.[0-9][0-9][0-9].[0-9][0-9][0-9]"
   pull_request:
   workflow_dispatch:
 
@@ -22,9 +25,9 @@ concurrency:
 
 jobs:
   build:
-    name: Lint, build, and package
+    name: Lint, test, and build the ZIP
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       CCACHE_DIR: ${{ github.workspace }}/.deps/ccache
       CCACHE_MAXSIZE: 500M
@@ -41,7 +44,7 @@ jobs:
       - name: Install native toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install --yes clang-18 clang-format-18 clang-tidy-18 lld-18 make ninja-build ccache pkg-config tar unzip wget
+          sudo apt-get install --yes clang-18 clang-format-18 lld-18 make ninja-build ccache pkg-config tar unzip wget git libcurl4-openssl-dev openssl
 
       - name: Restore dependencies
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -50,8 +53,9 @@ jobs:
             .deps/native
             .deps/test
             .deps/pacbrew
-            .deps/MkPFS
-          key: deps-${{ runner.os }}-${{ runner.arch }}-ubuntu24-python313-${{ hashFiles('tools/setup-*-dependencies.sh') }}
+            .deps/lapy
+            .deps/ps5-opengl
+          key: deps-${{ runner.os }}-${{ runner.arch }}-ubuntu24-python313-${{ hashFiles('tools/setup-*-dependencies.sh', 'tools/build-lapy-helper.py', 'tools/fetch-opengl-sdk.sh', 'tools/prepare-opengl.sh') }}
 
       - name: Restore compiler cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -74,60 +78,75 @@ jobs:
           read -r title_id content_version <<< "$metadata"
           [[ $title_id =~ ^PPSA[0-9]{5}$ ]] || exit 2
           [[ $content_version =~ ^[0-9]{2}\.[0-9]{3}\.[0-9]{3}$ ]] || exit 2
-          if [[ $GITHUB_REF_TYPE == tag && $GITHUB_REF_NAME != "$content_version" ]]; then
-            echo "Release tag must exactly match param.json contentVersion: $content_version" >&2
+          # contentVersion 01.000.040 is released as tag v1.000.040.
+          release_tag="v$((10#${content_version%%.*})).${content_version#*.}"
+          if [[ $GITHUB_REF_TYPE == tag && $GITHUB_REF_NAME != "$release_tag" ]]; then
+            echo "The tag must be $release_tag for param.json contentVersion $content_version" >&2
             exit 2
           fi
           echo "TITLE_ID=$title_id" >> "$GITHUB_ENV"
           echo "CONTENT_VERSION=$content_version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$release_tag" >> "$GITHUB_ENV"
 
+      # A pull request's build is named by its number and its own commit, on the
+      # artifact and inside the app folder (docs/PULL_REQUEST_BUILDS.md); the version in
+      # param.json stays the release's.
+      - name: Name this build
+        id: label
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ $GITHUB_EVENT_NAME == pull_request ]]; then
+            short=${PR_HEAD:0:7}
+            echo "artifact=${GITHUB_REPOSITORY##*/}-PR$PR_NUMBER-$short" >> "$GITHUB_OUTPUT"
+            echo "BUILD_LABEL=PR $PR_NUMBER, $short" >> "$GITHUB_ENV"
+          else
+            echo "artifact=prosperostore-$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Formatting, licence headers, scripts and assets. Static analysis (clang-tidy) takes
+      # 15 to 25 minutes on a runner and is left to "make lint" on a developer machine.
       - name: Lint source and metadata
-        run: make lint
+        run: LINT_SKIP_TIDY=1 make lint
 
-      - name: Run host GoogleTest suite
-        run: make test-unit
+      - name: Run the store's tests
+        run: make test
 
-      - name: Run host integration tests
-        run: make test-integration
-
-      - name: Check Lapy cooperative elevation client
-        run: make test-elevation
-
-      - name: Build filesystem capability example
-        run: |
-          make sandbox-elevation-ffpfsc
-          test ! -e dist/PPSA99790/assets
-
-      - name: Check update-check parsing and decisions
-        run: make test-update-check
-
-      - name: Build update-check example
-        run: |
-          make update-check-example
-          test -f dist/PPSA99780/assets/targets.txt
-
-      - name: Reproduce clean-room runtime shim
-        run: make libc
-
-      - name: Verify generated runtime is unchanged
-        run: cd runtime && sha256sum -c libc.prx.sha256
-
-      - name: Build compressed release image
-        run: make ffpfsc
+      - name: Build the app and its release ZIP
+        run: make release-zip
 
       - name: Report compiler cache statistics
         if: always()
         run: ccache --show-stats
 
-      - name: Write release checksums
-        run: cd dist && sha256sum "$TITLE_ID.ffpfsc" "$TITLE_ID.zip" > SHA256SUMS
+      - name: Check the ZIP and write its checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dist
+          python3 - "$TITLE_ID.zip" "$TITLE_ID" "$CONTENT_VERSION" <<'PY'
+          import json, sys, zipfile
+          archive, title, version = sys.argv[1:4]
+          with zipfile.ZipFile(archive) as z:
+              names = z.namelist()
+              assert all(n.startswith(title + "/") for n in names), "entries outside the app folder"
+              assert title + "/eboot.bin" in names, "no eboot.bin"
+              wrong = [i.filename for i in z.infolist() if (i.external_attr >> 16) & 0o777 != 0o777]
+              assert not wrong, f"entries not stored as 0777: {wrong[:3]}"
+              meta = json.loads(z.read(title + "/sce_sys/param.json"))
+              assert meta["contentVersion"] == version, meta["contentVersion"]
+              print(f"{archive}: {len(names)} entries, all 0777, version {version}")
+          PY
+          sha256sum "$TITLE_ID.zip" > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Upload build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ps5-native-app-boilerplate-${{ github.sha }}
+          name: ${{ steps.label.outputs.artifact }}
           path: |
-            dist/${{ env.TITLE_ID }}.ffpfsc
             dist/${{ env.TITLE_ID }}.zip
             dist/SHA256SUMS
           if-no-files-found: error
@@ -150,57 +169,32 @@ jobs:
         run: >-
           gh run download "$GITHUB_RUN_ID"
           --repo "$GITHUB_REPOSITORY"
-          --name "ps5-native-app-boilerplate-$GITHUB_SHA"
+          --name "prosperostore-$GITHUB_SHA"
           --dir release
 
-      - name: Prepare release assets
-        id: package
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
           cd release
-          mapfile -d '' files < <(find . -type f -print0)
-          if (( ${#files[@]} != 3 )); then
-            echo "Expected exactly one FFPFSC image, one app-folder ZIP, and SHA256SUMS." >&2
+          mapfile -t zips < <(find . -type f -name 'PPSA*.zip')
+          mapfile -t sums < <(find . -type f -name 'SHA256SUMS')
+          if (( ${#zips[@]} != 1 || ${#sums[@]} != 1 )); then
+            echo "Expected exactly one app-folder ZIP and SHA256SUMS." >&2
             exit 1
           fi
-          shopt -s nullglob
-          images=(PPSA*.ffpfsc dist/PPSA*.ffpfsc)
-          folder_zips=(PPSA*.zip dist/PPSA*.zip)
-          checksums=(SHA256SUMS dist/SHA256SUMS)
-          if (( ${#images[@]} != 1 || ${#folder_zips[@]} != 1 || ${#checksums[@]} != 1 )); then
-            echo "Release files must be one FFPFSC image, one app-folder ZIP, and SHA256SUMS." >&2
-            exit 1
-          fi
-          (cd "$(dirname "${checksums[0]}")" && sha256sum -c SHA256SUMS)
-          echo "image=${images[0]}" >> "$GITHUB_OUTPUT"
-          echo "folder_zip=${folder_zips[0]}" >> "$GITHUB_OUTPUT"
-          echo "checksum=${checksums[0]}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE: ${{ steps.package.outputs.image }}
-          FOLDER_ZIP: ${{ steps.package.outputs.folder_zip }}
-          CHECKSUM: ${{ steps.package.outputs.checksum }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          assets=("release/$IMAGE" "release/$FOLDER_ZIP" "release/$CHECKSUM")
-          image_name="${IMAGE##*/}"
-          folder_zip_name="${FOLDER_ZIP##*/}"
-          checksum_name="${CHECKSUM##*/}"
+          (cd "$(dirname "${sums[0]}")" && sha256sum -c SHA256SUMS)
+          # A release that already exists keeps its files: the catalog records the ZIP's
+          # checksum, so a published ZIP is never replaced.
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            while IFS= read -r old_asset; do
-              if [[ $old_asset != "$image_name" && $old_asset != "$folder_zip_name" && $old_asset != "$checksum_name" ]]; then
-                gh release delete-asset "$GITHUB_REF_NAME" "$old_asset" --yes --repo "$GITHUB_REPOSITORY"
-              fi
-            done < <(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
-          else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --repo "$GITHUB_REPOSITORY" \
-              --verify-tag \
-              --generate-notes \
-              --title "PS5 Native App Boilerplate $GITHUB_REF_NAME"
+            echo "Release $GITHUB_REF_NAME already exists; its files are left as they are." >&2
+            exit 1
           fi
+          gh release create "$GITHUB_REF_NAME" "${zips[0]}" "${sums[0]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "ProsperoStore ${GITHUB_REF_NAME#v} (alpha)"

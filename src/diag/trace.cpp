@@ -42,10 +42,9 @@ std::string file;
 // USB drive (which ShadowMountPlus 1.7 mounts into the sandbox), else nowhere.
 void open_file()
 {
-    const char *candidates[] = {"/data/prosperostore/debug-trace.txt",
-                                "/mnt/usb0/ProsperoStore-debug-trace.txt",
-                                "/mnt/usb1/ProsperoStore-debug-trace.txt",
-                                "/mnt/ext0/ProsperoStore-debug-trace.txt"};
+    const char *candidates[] = {
+        "/data/prosperostore/debug-trace.txt", "/mnt/usb0/ProsperoStore-debug-trace.txt",
+        "/mnt/usb1/ProsperoStore-debug-trace.txt", "/mnt/ext0/ProsperoStore-debug-trace.txt"};
     for (const char *candidate : candidates)
     {
         if (!file.empty() && file == candidate)
@@ -108,7 +107,7 @@ std::string probe_loader()
     (void)sceNetSetsockopt(socket, 0xffff, 0x1109, &connect_us, sizeof(connect_us));
     constexpr std::uint16_t port = 9021;
     const Address address{sizeof(Address), 2, static_cast<std::uint16_t>((port << 8) | (port >> 8)),
-                          0x0100007f, 0, {0}};
+                          0x0100007f,      0, {0}};
     const int result = sceNetConnect(socket, &address, sizeof(address));
     (void)sceNetSocketClose(socket);
     char text[48];
@@ -226,7 +225,8 @@ void trace_console(const char *when)
                 names.size() < 300)
                 names += std::string(names.empty() ? "" : ", ") + entry->d_name;
         closedir(folder);
-        trace("[%s] /data/prosperostore holds: %s", when, names.empty() ? "nothing" : names.c_str());
+        trace("[%s] /data/prosperostore holds: %s", when,
+              names.empty() ? "nothing" : names.c_str());
     }
     else
         trace("[%s] /data/prosperostore can't be listed (%s)", when, std::strerror(errno));

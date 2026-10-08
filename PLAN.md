@@ -73,7 +73,7 @@ is their first demanding customer. The rules:
 | The store takes from it | How |
 | --- | --- |
 | Project skeleton, build, packaging (`make`, the `.zip` release) | The repository is created from the template and keeps its `Makefile`, `tools/` and `tooling/` |
-| Lint, formatting, static analysis, host test setup, CI | Unchanged; the store's own code passes the same `make lint` and `make test` |
+| Lint, formatting, static analysis, host test setup, CI | The store's own code passes the same `make lint` and `make test`; static analysis (clang-tidy) runs in a local `make lint` or `make tidy`, not in GitHub Actions |
 | `sce_sys/` layout and versioning from `param.json` | As the template's README sets it; this is also what makes the store conformant with the catalog |
 | Sandbox elevation ([`docs/SANDBOX_ELEVATION.md`](https://github.com/blackbearreloaded/ps5-native-app-boilerplate/blob/main/docs/SANDBOX_ELEVATION.md)) | The example's client and helper, with the helper built for PPSA99000 |
 | Update check ([`docs/UPDATE_CHECK.md`](https://github.com/blackbearreloaded/ps5-native-app-boilerplate/blob/main/docs/UPDATE_CHECK.md)) | Its HTTPS transport is the starting point for the store's network layer; the store's own update notice uses it as it is |
@@ -118,9 +118,9 @@ numbers are defaults to confirm with the owner.
 | **Craft** | Every screen passes the UI library's `docs/CRAFT.md` checklist: safe area, text sizes, one visible focus, hint row, motion, sound, vibration | The checklist, per screen, in the milestone's review |
 | **Text** | Nothing clips or overlaps in any supported language, with the longest names and descriptions the catalog allows | Snapshots with worst-case strings |
 | **No broken installs** | At every instant an app's folder is the complete old version, the complete new one, or absent | Fault injection at every step of install, update and uninstall (section 6.4) |
-| **No crashes** | No crash, hang or forced close across the whole test matrix and a soak test | Host tests under sanitizers, fuzzing in CI, the console tour, and a soak run of hours with repeated installs of a test title |
+| **No crashes** | No crash, hang or forced close across the whole test matrix and a soak test | Host tests under sanitizers, a 20-second fuzz run of the JSON and archive readers in `make test` (run by CI on pull requests, version tags and manual runs), the console tour, and a soak run of hours with repeated installs of a test title |
 | **Hostile input** | Nothing read from the network can corrupt memory or escape its folder | Section 6.7, with fuzz targets as release blockers |
-| **Code** | Zero warnings with warnings as errors, clean static analysis, formatted, every module with host tests | The boilerplate's `make lint` and `make test` in CI |
+| **Code** | Zero warnings with warnings as errors, clean static analysis, formatted, every module with host tests | The boilerplate's `make lint` and `make test`: in CI without static analysis (clang-tidy), which runs in a local `make lint` or `make tidy` |
 | **Honesty** | The interface never claims more than it knows: "unknown version", "not managed", "couldn't verify" are said plainly | Review of every message against sections 5.6 to 5.13 |
 | **Console proof** | Each hardware gate is passed on a console and recorded: build, what was seen, how the app ended | The runbook's evidence, kept per milestone |
 
@@ -729,9 +729,11 @@ catalog entry pointing anywhere else is refused before any request is made.
   nothing is executed, interpreted or passed to a shell.
 - The archive rules of section 5.3 apply to every archive, including the
   store's own update.
-- **Fuzz tests on the PC** feed the JSON reader, the archive reader and the
-  icon decoder with mutated inputs in CI, with the sanitizers on. A crash is a
-  release blocker.
+- **Fuzz tests on the PC** feed the JSON reader and the archive reader with
+  mutated inputs, with the sanitizers on: 20 seconds in every `make test`
+  (`tools/store-test.sh`), which CI runs on pull requests, version tags and
+  manual runs, not on pushes to main. The icon decoder is not fuzzed yet
+  (open). A crash is a release blocker.
 
 ### 6.8 Diagnostics
 
@@ -817,7 +819,7 @@ passes [The quality bar](#the-quality-bar). Hardware gates are marked.
 | M1 | **Gate: filesystem** | On a console, after elevation, the store creates, renames and deletes a test folder in `/data/homebrew`; reads ShadowMountPlus's configuration and lists the scanned locations; and, for each other location, reports its filesystem and whether a rename is a single step there. Read-only mode appears when elevation is refused. This decides which locations the first release offers. |
 | M2 | **Gate: network and trust** | On a console, the store fetches the signed catalog from homebrew.page with certificate checks and verifies it; refuses a tampered and an outdated copy; and downloads one real release from GitHub through the redirect with a correct SHA-256, refusing a redirect to another host. Resume and Cancel are tried and recorded. All of it through libcurl from the elevated store. |
 | M3 | Catalog and browse | The full catalog scrolls at 60 frames per second with icons, sections, search and sort, from live data and from the offline cache. PC host first, then console. |
-| M4 | Install | A real catalog app installs from the store and appears on the home screen. Every refusal and failure in 5.3 has a test, including the exact space check and the archive limits. The fuzz tests run in CI. |
+| M4 | Install | A real catalog app installs from the store and appears on the home screen. Every refusal and failure in 5.3 has a test, including the exact space check and the archive limits. The fuzz tests of the JSON and archive readers run in CI through `make test`; the icon decoder's is still open. |
 | M5 | Installed, update, uninstall, running guard, recall | The Installed and Updates screens are correct for managed and unmanaged apps; update and uninstall work; a running app is refused; a test app removed from a test catalog shows the "no longer listed" warning. Needs the owner's running check (D9). |
 | M6 | **Gate: self-update** | Either the store replaces itself safely and asks for a restart, or the manual path is in place. |
 | M7 | Recovery and interruptions | Power loss is simulated at every step of install, update and uninstall on the PC host, and the journal brings the folder back to a complete state each time. Lost connections, timeouts and a removed drive behave as in 5.12. A subset is repeated on a console with a test title. |
@@ -836,8 +838,8 @@ passes [The quality bar](#the-quality-bar). Hardware gates are marked.
   oversized, lying about sizes); the transaction with a failure injected at
   every step; the retry and resume logic against a test server that drops
   connections; screen snapshots of every state in 5.9.
-- **Fuzzing:** the JSON reader, the archive reader and the icon decoder, in
-  CI, with the sanitizers on.
+- **Fuzzing:** the JSON reader and the archive reader, in `make test` and so in
+  CI, with the sanitizers on; the icon decoder is still to be added.
 - **On the console:** only what the host can't answer: the gates M1, M2 and
   M6, real installs, the running check, frame time. Runs are driven by the
   test mode (6.9), follow `ps5-agent-runbook`, and need the owner's go-ahead.

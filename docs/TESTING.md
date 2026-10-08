@@ -14,9 +14,13 @@ hardware can prove.
 | `make test` | Run every host test suite. |
 | `make check` | Run linting, all host tests, and a complete folder build. |
 
-GitHub Actions runs `make test-unit` and `make test-integration` as separate
-Ubuntu steps, so every pull request executes both layers with clear failure
-reporting. Host tests must remain deterministic, must never contact a console,
+GitHub Actions runs three Ubuntu steps for every pull request, version tag and
+run started by hand (a push to `main` starts nothing): `LINT_SKIP_TIDY=1 make
+lint`, one `make test`, then `make release-zip`. That `make test` runs every
+suite in the table and the store's own checks (`foundations-check`,
+`test-store` and `test-self-update` in `GNUmakefile`). Static analysis
+(clang-tidy) does not run there; it runs in a local `make lint` or `make
+tidy`. Host tests must remain deterministic, must never contact a console,
 and must be safe to run in parallel with unrelated console work. The first
 unit-test run downloads a pinned GoogleTest archive after verifying its
 SHA-256; later runs reuse `.deps/test/`.

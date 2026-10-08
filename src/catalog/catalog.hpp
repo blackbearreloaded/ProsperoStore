@@ -38,6 +38,12 @@ struct Entry
     // Not from the catalog's files: set by the store on entries that come from the custom
     // catalog shown beside the official one.
     bool extra = false;
+    // What the catalog's scan of the release file found. Advice, not a guarantee: the scan reads
+    // the file and can miss things. Empty strings mean "not known", never "stays".
+    std::string sandbox;       // "stays", "leaves", "unclear"
+    std::string build;         // "attested", "workflow", "developer"
+    std::uint32_t helpers = 0; // helper programs that run outside the sandbox
+    std::uint32_t helpers_unapproved = 0;
 };
 
 struct Manifest

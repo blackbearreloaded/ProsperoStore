@@ -56,7 +56,9 @@ std::string reclaim_store_folder(const std::string &folder)
     limit = 4000;
     const int after = foreign(folder, geteuid(), 0, limit);
     return std::to_string(before) + " entries of another user; worker " +
-           (result == 1 ? "reclaimed them" : result == 0 ? "failed" : "could not be started") +
+           (result == 1   ? "reclaimed them"
+            : result == 0 ? "failed"
+                          : "could not be started") +
            "; " + std::to_string(after) + " left";
 }
 } // namespace store::system

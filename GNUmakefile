@@ -36,7 +36,7 @@ app ffpkg ffpfsc packages: opengl system-keyboard-imports store-worker self-upda
 # The ZIP handed to people: every entry stored as 0777, so a tool that keeps the
 # archive permissions still leaves an app the console will start.
 .PHONY: release-zip
-release-zip: ffpkg
+release-zip: app
 	@python3 tools/store-zip-modes.py dist/PPSA99000.zip
 
 # The console limits how fast an app writes to its storage; this payload, sent

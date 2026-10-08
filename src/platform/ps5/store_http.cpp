@@ -58,10 +58,10 @@ void trace_request(const std::string &url, const Response &out, const char *tran
     const bool worked = out.error.empty() && (out.status == 200 || out.status == 304);
     if (worked ? traced_successes.fetch_add(1) >= 3 : traced_failures.fetch_add(1) >= 20)
         return;
-    store::diag::trace("request %s: %.110s -> HTTP %d, %llu bytes%s%s%s%s (code 0x%08x)",
-                       transport, url.c_str(), out.status,
-                       static_cast<unsigned long long>(out.bytes), worked ? "" : ", failed at ",
-                       worked ? "" : step, out.error.empty() ? "" : ": ", out.error.c_str(), code);
+    store::diag::trace("request %s: %.110s -> HTTP %d, %llu bytes%s%s%s%s (code 0x%08x)", transport,
+                       url.c_str(), out.status, static_cast<unsigned long long>(out.bytes),
+                       worked ? "" : ", failed at ", worked ? "" : step,
+                       out.error.empty() ? "" : ": ", out.error.c_str(), code);
 }
 #endif
 } // namespace
@@ -232,8 +232,8 @@ Response request_once(const std::string &url, std::uint64_t limit, const Sink &s
                        : resources.tmpl < 0       ? "the request template"
                        : resources.connection < 0 ? "the connection set-up"
                        : resources.request < 0    ? "the request set-up"
-                       : out.status == 0 ? "sending (name lookup, connecting or TLS)"
-                                         : "reading the answer";
+                       : out.status == 0          ? "sending (name lookup, connecting or TLS)"
+                                                  : "reading the answer";
     trace_request(url, out, "sceHttp", step, static_cast<unsigned>(result));
 #endif
     return out;

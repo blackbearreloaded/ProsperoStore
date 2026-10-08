@@ -31,7 +31,8 @@
 </p>
 
 ProsperoStore is a homebrew app store that runs natively on the PS5. Title ID `PPSA99000`.
-The current version is **01.000.000**, the first release, an alpha.
+It is an alpha; the current version is the newest one on the
+[releases page](https://github.com/blackbearreloaded/ProsperoStore/releases).
 
 > [!WARNING]
 > **ProsperoStore includes an exact-title one-shot helper built from upstream
@@ -175,7 +176,8 @@ the selected catalog, and app QR codes use its `page` URLs.
 The store's source is in this repository: the app in `src/`, the file worker in `helper/`, the
 host previews and checks in `host/` and `tests/`. Build on Linux (WSL works) with
 `make DEVELOPMENT=1 app`, or `make app` for a release build without development requests.
-`make test lint` runs the host checks. [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) records
+`make test lint` runs the host checks. Every pull request gets an installable build named by its
+number and commit: see [Pull-request builds](docs/PULL_REQUEST_BUILDS.md). [IMPLEMENTATION_NOTES.md](IMPLEMENTATION_NOTES.md) records
 what was built and how it was verified on consoles, and [PLAN.md](PLAN.md) the design and
 decisions. `FOUNDATIONS.json` pins the foundation sources, and `third_party/STORE_SOURCES.json` the
 vendored libraries. The store reads the catalog API at `https://homebrew.page/api/v1/`, specified

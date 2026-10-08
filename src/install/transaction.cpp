@@ -714,9 +714,8 @@ Result recover(const Environment &environment)
         {
         };
         const int lstat_errno = lstat(path.c_str(), &info) == 0 ? 0 : errno;
-        diag::trace("install journal %s: kind %d, lstat errno %d, errno %d, %s; body: %.200s",
-                    step, static_cast<int>(found), lstat_errno, saved, error.c_str(),
-                    body.c_str());
+        diag::trace("install journal %s: kind %d, lstat errno %d, errno %d, %s; body: %.200s", step,
+                    static_cast<int>(found), lstat_errno, saved, error.c_str(), body.c_str());
 #endif
         return fail("The record of an interrupted operation can't be read. Installing is off.");
     }

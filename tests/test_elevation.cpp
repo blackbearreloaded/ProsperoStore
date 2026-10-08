@@ -25,6 +25,8 @@ struct State
     bool resident_claimed{};
     unsigned data_open_failures{};
     unsigned data_open_calls{};
+    unsigned data_list_failures{};
+    unsigned data_list_calls{};
     unsigned sleeps{};
     unsigned prepare_calls{};
     unsigned socket_calls{};
@@ -122,6 +124,29 @@ extern "C"
             return 13;
         errno = ENOENT;
         return -1;
+    }
+
+    // /data that opens and writes but refuses a listing: what ShadowMountPlus 1.7
+    // exposes to a sandboxed app. Not elevation.
+    DIR *opendir(const char *path)
+    {
+        if (std::strcmp(path, "/data") != 0)
+        {
+            errno = ENOENT;
+            return nullptr;
+        }
+        ++test::state.data_list_calls;
+        if (test::state.data_list_calls <= test::state.data_list_failures)
+        {
+            errno = EPERM;
+            return nullptr;
+        }
+        return reinterpret_cast<DIR *>(&test::state);
+    }
+
+    int closedir(DIR *)
+    {
+        return 0;
     }
 
     ssize_t write(int descriptor, const void *buffer, size_t size)
@@ -266,6 +291,18 @@ int main()
     assert(test::state.prepare_calls == 1 && test::state.socket_calls == 0);
     assert(test::state.request == "{\"PID\":4242}\n");
     assert(test::state.result == "DATA_OK=1 OPEN_ERRNO=0\n");
+
+    test::reset();
+    test::state.data_list_failures = 1;
+    assert(elevation::request(Capability::filesystem) == Status::ok);
+    assert(std::strcmp(elevation::path(), "resident") == 0);
+    assert(test::state.prepare_calls == 1 && test::state.data_list_calls == 2);
+
+    test::reset();
+    test::state.data_list_failures = 1000;
+    test::state.resident_claimed = true;
+    assert(elevation::request(Capability::filesystem) == Status::timeout);
+    assert(std::strcmp(elevation::path(), "resident") == 0);
 
     test::reset();
     test::state.data_open_failures = 51;

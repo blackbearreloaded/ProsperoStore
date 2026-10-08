@@ -14,6 +14,14 @@ case "$format" in folder|ffpkg|ffpfsc|all) ;; *)
     echo "usage: tools/build.sh [Folder|Ffpkg|Ffpfsc|All]" >&2
     exit 2
 esac
+# What a build that is not a release calls itself, such as a pull request's number and
+# commit. Checked before anything is built; written into the app folder further down.
+if [[ -n ${BUILD_LABEL:-} ]]; then
+    [[ $BUILD_LABEL =~ ^[A-Za-z0-9\ ,._#-]{1,40}$ ]] || {
+        echo "BUILD_LABEL must be 1 to 40 letters, digits, spaces or , . _ # -" >&2
+        exit 2
+    }
+fi
 
 for command in python3 sha256sum; do
     command -v "$command" >/dev/null || {
@@ -272,6 +280,8 @@ mkdir -p "$app/sce_sys" "$app/sce_module"
     --magic "$fself_magic"
 
 cp "$param" "$app/sce_sys/param.json"
+# Says which build this is (docs/PULL_REQUEST_BUILDS.md); a release has none.
+[[ -z ${BUILD_LABEL:-} ]] || printf '%s\n' "$BUILD_LABEL" > "$app/build-label.txt"
 for asset in icon0.png pic0.dds pic1.dds snd0.at9; do
     [[ -f $root/$app_sce_sys/$asset ]] && cp "$root/$app_sce_sys/$asset" "$app/sce_sys/$asset"
 done

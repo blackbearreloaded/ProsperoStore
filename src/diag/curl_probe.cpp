@@ -74,8 +74,7 @@ void probe_pieces(const char *when)
     {
         int enabled = 1;
         const int nbio = setsockopt(sock, SOL_SOCKET, 0x1200, &enabled, sizeof(enabled));
-        trace("[%s] curl: socket() ok, SO_NBIO %s", when,
-              nbio == 0 ? "ok" : error_text().c_str());
+        trace("[%s] curl: socket() ok, SO_NBIO %s", when, nbio == 0 ? "ok" : error_text().c_str());
         close(sock);
     }
     int pair[2];
@@ -96,8 +95,8 @@ void probe_pieces(const char *when)
     else
         trace("[%s] curl: pipe failed (%s)", when, error_text().c_str());
     pthread_t thread;
-    const int started = pthread_create(
-        &thread, nullptr, +[](void *) -> void * { return nullptr; }, nullptr);
+    const int started =
+        pthread_create(&thread, nullptr, +[](void *) -> void * { return nullptr; }, nullptr);
     if (started == 0)
         pthread_join(thread, nullptr);
     trace("[%s] curl: thread start = %d", when, started);
@@ -156,19 +155,20 @@ void curl_probe(const char *when)
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &capture);
-    curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION,
-                     +[](CURL *, curl_infotype type, char *data, size_t size, void *opaque) -> int
-                     {
-                         auto &c = *static_cast<Capture *>(opaque);
-                         if (type != CURLINFO_TEXT || c.lines >= 30)
-                             return 0;
-                         ++c.lines;
-                         std::string line(data, size);
-                         while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
-                             line.pop_back();
-                         trace("[%s] curl says: %s", c.when, line.c_str());
-                         return 0;
-                     });
+    curl_easy_setopt(
+        curl, CURLOPT_DEBUGFUNCTION,
+        +[](CURL *, curl_infotype type, char *data, size_t size, void *opaque) -> int
+        {
+            auto &c = *static_cast<Capture *>(opaque);
+            if (type != CURLINFO_TEXT || c.lines >= 30)
+                return 0;
+            ++c.lines;
+            std::string line(data, size);
+            while (!line.empty() && (line.back() == '\n' || line.back() == '\r'))
+                line.pop_back();
+            trace("[%s] curl says: %s", c.when, line.c_str());
+            return 0;
+        });
     const auto result = curl_easy_perform(curl);
     long status = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
