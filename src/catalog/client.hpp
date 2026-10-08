@@ -49,8 +49,12 @@ class Client
 {
   public:
     // Empty cache means read-only, in-memory browsing with no filesystem access.
-    explicit Client(std::string cache, std::string api = kDefaultApi, bool verify = true)
-        : cache_(std::move(cache)), api_(std::move(api)), verify_(verify)
+    // mirrors: other API directories publishing the same catalog. A refresh tries api
+    // first, then each mirror, and uses the first that loads and passes every check.
+    explicit Client(std::string cache, std::string api = kDefaultApi, bool verify = true,
+                    std::vector<std::string> mirrors = {})
+        : cache_(std::move(cache)), api_(std::move(api)), verify_(verify),
+          mirrors_(std::move(mirrors)), active_(api_)
     {
         // Keep the official signed cache and its rollback record across upgrades.
         if (!cache_.empty() && (api_ != kDefaultApi || !verify_))
@@ -60,6 +64,19 @@ class Client
     bool refresh(Snapshot &out, net::Control &control, std::string &error);
     bool detail(const Snapshot &snapshot, const std::string &id, Entry &out, net::Control &control,
                 std::string &error);
+    // The API directory that served the last successful refresh (api until one succeeds).
+    const std::string &active() const
+    {
+        return active_;
+    }
+    const std::string &api() const
+    {
+        return api_;
+    }
+    bool mirrored() const
+    {
+        return active_ != api_;
+    }
 
   private:
     bool file(const Manifest &manifest, const std::string &name, std::size_t limit,
@@ -68,8 +85,12 @@ class Client
                net::Control *control, std::string &error);
     bool manifest(const std::string &bundle, std::uint64_t highest, Manifest &out,
                   std::string &error) const;
+    bool refresh_from(const std::string &base, std::uint64_t highest, Snapshot &next,
+                      std::string &bundle, net::Control &control, std::string &error);
     std::string cache_;
     std::string api_;
     bool verify_ = true;
+    std::vector<std::string> mirrors_;
+    std::string active_; // where files are fetched from
 };
 } // namespace store::catalog

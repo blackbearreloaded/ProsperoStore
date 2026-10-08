@@ -23,6 +23,23 @@ bool version(std::string_view value);
 bool update_available(std::string_view installed, std::string_view available);
 bool api_url(std::string_view url);
 inline constexpr const char *kDefaultApi = "https://homebrew.page/api/v1/";
+// Other places that publish the same official catalog, tried in this order when
+// homebrew.page can't be reached. The catalog's signature and file hashes are checked
+// exactly as for homebrew.page, so a mirror can serve it but never change it.
+// None yet: add each as a full API directory, e.g. "https://mirror.example/api/v1/".
+inline const std::vector<std::string> &official_mirrors()
+{
+    static const std::vector<std::string> mirrors{};
+    return mirrors;
+}
+// A catalog address (an icon, say) written for one API directory, as the same file in
+// another. An address outside `from` is returned as it is.
+inline std::string rebased(std::string_view url, std::string_view from, std::string_view to)
+{
+    return from != to && url.starts_with(from)
+               ? std::string(to) + std::string(url.substr(from.size()))
+               : std::string(url);
+}
 // Empty input restores the official API; otherwise require an HTTPS directory URL.
 bool normalize_api(std::string_view value, std::string &out);
 bool artifact_url(std::string_view url, bool redirected = false);

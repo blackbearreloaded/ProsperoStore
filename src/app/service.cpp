@@ -597,8 +597,11 @@ void Service::run()
     // signed and checked as ever; the custom one is loaded beside it and only adds apps.
     const bool additive = with_official && catalog_url != catalog::kDefaultApi;
     const std::string cache_folder = root_.empty() ? "" : root_ + "/cache";
-    catalog::Client client(cache_folder, additive ? std::string(catalog::kDefaultApi) : catalog_url,
-                           additive ? true : verify_signatures);
+    // The official catalog, wherever it is used, may also come from its mirrors.
+    const std::string main_api = additive ? std::string(catalog::kDefaultApi) : catalog_url;
+    catalog::Client client(cache_folder, main_api, additive ? true : verify_signatures,
+                           main_api == catalog::kDefaultApi ? catalog::official_mirrors()
+                                                            : std::vector<std::string>{});
     catalog::Client extra_client(cache_folder, catalog_url, verify_signatures);
     catalog::Snapshot extra;
     std::string extra_error;
@@ -684,6 +687,21 @@ void Service::run()
                                    : "Offline • " + error;
         if (!refreshed && snapshot.accepted && !snapshot.verified)
             result.message = "Signatures not checked • " + result.message;
+        if (refreshed && client.mirrored())
+        {
+            // Said in the status, and icons are fetched from the same place.
+            result.message = snapshot.verified ? "Catalog verified (mirror) • Up to date"
+                                               : "Signatures not checked (mirror) • Up to date";
+            hui::sys::log("[STORE] catalog from mirror %s", client.active().c_str());
+#ifdef STORE_DEBUG_TRACE
+            diag::trace("catalog loaded from the mirror %s", client.active().c_str());
+#endif
+        }
+        {
+            std::lock_guard lock(mutex_);
+            catalog_base_ = client.api();
+            catalog_active_ = client.active();
+        }
         hui::sys::log("[STORE] catalog verified=%d online=%d sequence=%llu apps=%zu",
                       snapshot.verified, refreshed,
                       static_cast<unsigned long long>(snapshot.manifest.sequence),
@@ -795,8 +813,12 @@ void Service::run()
                     if (!artwork.cached(artwork_entry, result.image) && snapshot.online)
                     {
                         std::string encoded;
-                        const auto response = net::fetch(artwork_entry.icon, net::Purpose::catalog,
-                                                         2u << 20, encoded, control_);
+                        // An official icon comes from the mirror when the catalog did.
+                        const auto response =
+                            net::fetch(from_extra ? artwork_entry.icon
+                                                  : catalog::rebased(artwork_entry.icon,
+                                                                     client.api(), client.active()),
+                                       net::Purpose::catalog, 2u << 20, encoded, control_);
                         if (response.ok())
                             artwork.store(artwork_entry, encoded, result.image);
                     }
@@ -902,8 +924,15 @@ void Service::load_icons()
             if (!loaded && online)
             {
                 std::string encoded;
+                // An official icon comes from the mirror when the catalog did.
+                std::string icon_url = entry.icon;
+                if (!entry.extra)
+                {
+                    std::lock_guard lock(mutex_);
+                    icon_url = catalog::rebased(entry.icon, catalog_base_, catalog_active_);
+                }
                 const auto response =
-                    net::fetch(entry.icon, net::Purpose::catalog, 2u << 20, encoded, icon_control_);
+                    net::fetch(icon_url, net::Purpose::catalog, 2u << 20, encoded, icon_control_);
                 loaded = response.ok() && artwork.store(entry, encoded, result.image);
             }
 #ifdef STORE_DEVELOPMENT
