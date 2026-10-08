@@ -26,7 +26,9 @@ int read_trust(const std::string &path, std::string &out)
     const int fd = ::open(path.c_str(), O_RDONLY | O_NOFOLLOW);
     if (fd < 0)
         return errno == ENOENT ? 0 : -1;
-    struct stat info{};
+    struct stat info
+    {
+    };
     bool valid = ::fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_size > 64 &&
                  static_cast<std::uint64_t>(info.st_size) <= kVersionsLimit + 64;
     std::string candidate;
