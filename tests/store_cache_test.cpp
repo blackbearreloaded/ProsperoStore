@@ -103,42 +103,6 @@ int main()
     assert(!other.accepted);
     remote[base + "manifest.json"] = "{}";
     assert(!uncached.refresh(other, control, error)); // Still require the API manifest schema.
-    {
-        // A mirror: the catalog's own address is down, the second one has the same files.
-        const std::string down = "https://down.example/api/v1/";
-        remote = {{base + "manifest.json", manifest},
-                  {base + "index.json", index},
-                  {base + "versions.json", versions},
-                  {base + "apps/PPSA99500.json", detail}};
-        Client mirrored("", down, false, {"https://also-down.example/api/v1/", base});
-        urls.clear();
-        Snapshot served;
-        assert(mirrored.refresh(served, control, error) && error.empty());
-        assert(served.accepted && mirrored.mirrored() && mirrored.active() == base &&
-               mirrored.api() == down);
-        // Each address is asked once, in order, and the files follow the one that answered.
-        assert((urls == std::vector<std::string>{down + "manifest.json",
-                                                 "https://also-down.example/api/v1/manifest.json",
-                                                 base + "manifest.json", base + "index.json",
-                                                 base + "versions.json"}));
-        urls.clear();
-        assert(mirrored.detail(served, "PPSA99500", app, control, error) &&
-               urls == std::vector<std::string>{base + "apps/PPSA99500.json"});
-        // The address itself answering again takes over at the next refresh.
-        for (const char *name : {"manifest.json", "index.json", "versions.json"})
-            remote[down + name] = remote.at(base + name);
-        assert(mirrored.refresh(served, control, error) && !mirrored.mirrored());
-        // All down: the failure is the first address's, and nothing changes.
-        remote.clear();
-        assert(!mirrored.refresh(served, control, error) && error == "offline" &&
-               !mirrored.mirrored());
-        // An icon written for the catalog's address, as the mirror's copy of it.
-        assert(rebased(down + "icons/PPSA99500-256.png?v=1", down, base) ==
-               base + "icons/PPSA99500-256.png?v=1");
-        assert(rebased("https://elsewhere.example/a.png", down, base) ==
-               "https://elsewhere.example/a.png");
-        assert(official_mirrors().empty()); // none configured yet
-    }
     // Clean the source-specific sibling caches as well as the original test directory.
     for (const auto mode : {"\nunsigned", "\nsigned"})
         fs::remove_all(std::string(path) + "-" + sha256(base + mode));

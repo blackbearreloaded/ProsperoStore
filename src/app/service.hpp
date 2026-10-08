@@ -70,9 +70,6 @@ class Service
     bool verify_signatures = true;
     // With a custom catalog set: keep the official one and add the custom catalog's apps.
     bool with_official = false;
-    // Set by the catalog thread once a refresh succeeded: the catalog's own API directory
-    // and the one (a mirror, perhaps) its files came from. Read under mutex_.
-    std::string catalog_base_, catalog_active_;
     // Tests only: replaces the environment built from the console's configuration.
     std::optional<install::Environment> installer_environment;
     bool start();

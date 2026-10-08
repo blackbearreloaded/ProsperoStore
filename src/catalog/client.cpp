@@ -82,7 +82,7 @@ bool Client::file(const Manifest &manifest, const std::string &name, std::size_t
         error = "The offline catalog is incomplete";
         return false;
     }
-    const auto response = net::fetch(active_ + name, net::Purpose::catalog, limit, body, *control);
+    const auto response = net::fetch(api_ + name, net::Purpose::catalog, limit, body, *control);
     if (!response.ok())
     {
         error = response.error;
@@ -174,38 +174,29 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
         }
         highest = previous.sequence;
     }
-    // The catalog's own address first, then each mirror: the first that loads and passes
-    // every check is used, and its files are fetched from there until the next refresh.
-    // A mirror gets the same signature, hash and rollback checks, so it can't change a thing.
-    Snapshot next;
-    std::string bundle;
-    const std::string before = active_;
-    bool loaded = false;
-    std::vector<std::string> bases{api_};
-    bases.insert(bases.end(), mirrors_.begin(), mirrors_.end());
-    for (const auto &base : bases)
+    std::string body, signature;
+    auto response =
+        net::fetch(api_ + "manifest.json", net::Purpose::catalog, kVersionsLimit, body, control);
+    if (!response.ok())
     {
-        std::string normalized_base, base_error;
-        if (!normalize_api(base, normalized_base) || normalized_base != base)
-            continue;
-        next = {};
-        if (refresh_from(base, highest, next, bundle, control, base_error))
-        {
-            loaded = true;
-            break;
-        }
-        // The first address's failure is the one worth showing.
-        if (error.empty() || base == api_)
-            error = base_error;
-        if (control.cancelled.load())
-            break;
-    }
-    if (!loaded)
-    {
-        active_ = before;
+        error = response.error;
         return false;
     }
-    error.clear();
+    if (verify_)
+    {
+        response = net::fetch(api_ + "manifest.sig", net::Purpose::catalog, 64, signature, control);
+        if (!response.ok())
+        {
+            error = response.error;
+            return false;
+        }
+    }
+    else
+        signature.assign(64, '\0'); // Same bundle layout, isolated from every signed cache.
+    Snapshot next;
+    const std::string bundle = signature + body;
+    if (!parse(bundle, highest, next, &control, error))
+        return false;
     if (cache_.empty())
     {
         out = std::move(next);
@@ -225,34 +216,6 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
     }
     out = std::move(next);
     return true;
-}
-
-bool Client::refresh_from(const std::string &base, std::uint64_t highest, Snapshot &next,
-                          std::string &bundle, net::Control &control, std::string &error)
-{
-    std::string body, signature;
-    auto response =
-        net::fetch(base + "manifest.json", net::Purpose::catalog, kVersionsLimit, body, control);
-    if (!response.ok())
-    {
-        error = response.error;
-        return false;
-    }
-    if (verify_)
-    {
-        response = net::fetch(base + "manifest.sig", net::Purpose::catalog, 64, signature, control);
-        if (!response.ok())
-        {
-            error = response.error;
-            return false;
-        }
-    }
-    else
-        signature.assign(64, '\0'); // Same bundle layout, isolated from every signed cache.
-    bundle = signature + body;
-    // The files the manifest names come from the same place as the manifest.
-    active_ = base;
-    return parse(bundle, highest, next, &control, error);
 }
 
 bool Client::detail(const Snapshot &snapshot, const std::string &id, Entry &out,
