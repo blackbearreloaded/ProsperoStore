@@ -28,6 +28,12 @@ jobs:
     name: Lint, test, and build the ZIP
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    # The two write entries are for the attestation step only: a signing identity for this run,
+    # and storing the attestation. A pull request from a fork gets neither, whatever is asked.
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       CCACHE_DIR: ${{ github.workspace }}/.deps/ccache
       CCACHE_MAXSIZE: 500M
@@ -141,6 +147,15 @@ jobs:
           PY
           sha256sum "$TITLE_ID.zip" > SHA256SUMS
           cat SHA256SUMS
+
+      # Signed provenance: this ZIP was built by this workflow from this commit. Anyone can check a
+      # downloaded copy with `gh attestation verify <file> -R <owner>/<repo>`. Not for pull requests
+      # (a fork's run cannot sign), and not in a private repository (the plan does not include it).
+      - name: Attest the release ZIP
+        if: github.event_name != 'pull_request' && !github.event.repository.private
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: dist/${{ env.TITLE_ID }}.zip
 
       - name: Upload build
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

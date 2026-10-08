@@ -26,6 +26,28 @@ class BuildLabelTests(unittest.TestCase):
         # A contributor's code is never built with write access or secrets.
         self.assertNotIn("pull_request_target:", workflow)
 
+    def test_release_zip_is_attested_before_upload(self):
+        workflow = (ROOT / ".github/workflows/tooling.yml").read_text(encoding="utf-8")
+        # The finished ZIP, and only the ZIP, is attested before it is uploaded: pinned action,
+        # never for a pull request or in a private repository.
+        attest = workflow.index("- name: Attest the release ZIP")
+        upload = workflow.index("- name: Upload build")
+        self.assertLess(workflow.index("- name: Check the ZIP and write its checksum"), attest)
+        self.assertLess(attest, upload)
+        step = workflow[attest:upload]
+        self.assertIn(
+            "uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2", step
+        )
+        self.assertIn(
+            "if: github.event_name != 'pull_request' && !github.event.repository.private", step
+        )
+        self.assertIn("subject-path: dist/${{ env.TITLE_ID }}.zip\n", step)
+        self.assertNotIn("SHA256SUMS", step)
+        build_job = workflow[workflow.index("\n  build:") : workflow.index("\n  release:")]
+        for permission in ("contents: read", "id-token: write", "attestations: write"):
+            self.assertIn(f"      {permission}\n", build_job)
+        self.assertNotIn("id-token", workflow.replace(build_job, ""))
+
     def test_build_checks_the_label_first_and_writes_it(self):
         build = (ROOT / "tools/build.sh").read_text(encoding="utf-8")
         self.assertIn("printf '%s\\n' \"$BUILD_LABEL\" > \"$app/build-label.txt\"", build)

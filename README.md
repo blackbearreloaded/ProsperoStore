@@ -85,7 +85,9 @@ It is an alpha; the current version is the newest one on the
 
 1. Make sure the console runs ShadowMountPlus 1.7beta4 or newer and a payload loader on port 9021
    (see the warning above).
-2. Download `PPSA99000.zip` from the release and unzip it.
+2. Download `PPSA99000.zip` from the release and unzip it. A release ZIP built by the workflow can
+   be checked with `gh attestation verify PPSA99000.zip -R blackbearreloaded/ProsperoStore`
+   (GitHub CLI); this covers releases built by GitHub Actions from now on, not earlier ones.
 3. Copy the `PPSA99000` folder into a folder ShadowMountPlus scans, for example
    `/data/homebrew`, so that `eboot.bin` ends up at `/data/homebrew/PPSA99000/eboot.bin` (not one
    folder deeper).
