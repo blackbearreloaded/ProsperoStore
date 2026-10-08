@@ -31,9 +31,10 @@ int main()
     std::string error;
     store::catalog::Client memory("");
     assert(!memory.cached(snapshot, error));
-    assert(!memory.refresh(snapshot, control, error) && error == "offline" && requests == 1);
+    // One request to the catalog's site and one to its mirror.
+    assert(!memory.refresh(snapshot, control, error) && error == "offline" && requests == 2);
     requests = 0;
-    assert(!client.refresh(snapshot, control, error) && requests == 1);
+    assert(!client.refresh(snapshot, control, error) && requests == 2);
     requests = 0;
     fs::create_directory(record);
     assert(!client.refresh(snapshot, control, error) && requests == 0);

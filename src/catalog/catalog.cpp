@@ -194,7 +194,13 @@ bool update_available(std::string_view installed, std::string_view available)
 
 bool api_url(std::string_view url)
 {
-    return host(url) == "homebrew.page";
+    const auto name = host(url);
+    if (name == "homebrew.page")
+        return true;
+    // The mirror is one repository's pages on a host shared with everyone's: its path is part
+    // of its identity, and nothing may climb out of it.
+    return name == "blackbearreloaded.github.io" && url.starts_with(kApiMirror) &&
+           url.find("..") == std::string_view::npos && url.find('%') == std::string_view::npos;
 }
 bool artifact_url(std::string_view url, bool redirected)
 {
