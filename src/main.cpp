@@ -234,7 +234,8 @@ int main()
         // The custom catalog only when it is switched on; the official one is always signed.
         const auto &chosen = screen.settings();
         const bool custom = chosen.custom_active();
-        service.catalog_url = custom ? chosen.catalog_url : std::string(store::catalog::kDefaultApi);
+        service.catalog_url =
+            custom ? chosen.catalog_url : std::string(store::catalog::kDefaultApi);
         service.verify_signatures = custom ? chosen.verify_signatures : true;
         service.with_official = custom && chosen.use_official;
     }

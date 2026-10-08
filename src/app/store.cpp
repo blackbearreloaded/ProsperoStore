@@ -1529,7 +1529,7 @@ void Screen::draw_top_bar(const ui::Fonts &fonts)
     list.rounded_rect({x, kTopY - 11.0f, 1.5f, 22.0f}, 0, kInk.with_alpha(0.25f));
     ui::text(list, fonts.semibold,
              active_catalog_url_ == catalog::kDefaultApi ? "homebrew.page"
-             : active_with_official_                     ? "homebrew.page + custom"
+             : active_with_official_                     ? "Two catalogs"
                                                          : "Custom catalog",
              x + 20.0f, centred(kTopY, 20), 20, kAccent.with_alpha(0.92f));
 
@@ -3167,9 +3167,9 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
             pending_catalog_url = true; // no address yet: ask for it now
         if (!settings_.custom_active())
             settings_.use_official = true;
-        notify("Catalog settings saved",
-               settings_.use_custom ? "Close and reopen ProsperoStore to add your catalog."
-                                    : "Close and reopen ProsperoStore to apply.");
+        notify("Catalog settings saved", settings_.use_custom
+                                             ? "Close and reopen ProsperoStore to add your catalog."
+                                             : "Close and reopen ProsperoStore to apply.");
     }
     else if (setting == 7)
     {
@@ -3499,8 +3499,8 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             {6, "Vibration", "A light answer from the controller.", 1, "", settings_.vibration},
             {8, "Reduce motion", "Nothing drifts, floats or slides; things fade instead.", 1, "",
              settings_.reduce_motion},
-            {4, "Official catalog", "homebrew.page, signed. With both on, its apps win a clash.",
-             1, "", settings_.use_official},
+            {4, "Official catalog", "homebrew.page, signed. With both on, its apps win a clash.", 1,
+             "", settings_.use_official},
             {4, "Custom catalog", "Your own feed. With both on, its apps are added.", 1, "",
              settings_.use_custom},
             {4, "Custom catalog URL", "HTTPS API directory. Applies when the store next opens.", 3,

@@ -21,7 +21,8 @@ struct Snapshot
 // The official catalog with a custom one beside it. The custom catalog only adds apps:
 // where both list a title ID the official entry stays, so a custom catalog can never
 // stand in for an app the official one offers. clashes names the entries left out.
-inline Snapshot with_extra(Snapshot official, const Snapshot &extra, std::vector<std::string> *clashes)
+inline Snapshot with_extra(Snapshot official, const Snapshot &extra,
+                           std::vector<std::string> *clashes)
 {
     if (!extra.accepted)
         return official;
