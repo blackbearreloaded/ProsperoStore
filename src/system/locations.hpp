@@ -13,6 +13,9 @@ struct ScanPolicy
     std::vector<std::string> roots;
     std::vector<std::string> manual;
     unsigned depth = 1;
+    // Lines of the configuration that name a path the store can't read as one (kept for
+    // the debug log). They are left out; the rest of the configuration still counts.
+    std::vector<std::string> ignored;
 };
 // ShadowMountPlus 1.7 at f0d15ffc: manual entries are titles/images, not scan roots.
 bool scan_policy(std::string_view config, std::string_view manual, ScanPolicy &out,

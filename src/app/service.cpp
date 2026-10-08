@@ -197,6 +197,9 @@ bool Service::load_policy(system::ScanPolicy &out) const
                     policy.roots.size(), roots.empty() ? "none" : roots.c_str(),
                     policy.manual.size(), manual_entries.empty() ? "" : ": ",
                     manual_entries.c_str());
+        for (const auto &line : policy.ignored)
+            diag::trace("ShadowMountPlus settings: left out, not a path the store can read: %s",
+                        line.c_str());
     }
 #endif
     out = std::move(policy);
