@@ -356,6 +356,9 @@ static void check_catalog_settings()
     assert(kept.use_custom && !kept.use_official && kept.custom_active());
     assert(parse_settings("use_official=0\nuse_custom=0\n").use_official);
     assert(parse_settings("use_official=0\nuse_custom=1\n").use_official); // no address: not active
+    assert(!parse_settings("use_official=1
+use_custom=1
+").use_custom); // switch saved on, no address
 }
 
 int main(int argc, char **argv)

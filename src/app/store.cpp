@@ -2957,8 +2957,12 @@ Settings parse_settings(std::string_view text)
         else if (key == "use_custom")
             settings.use_custom = value == "1";
     }
+    // A custom catalog with no address is not one: the official catalog alone.
     if (!settings.custom_active())
+    {
         settings.use_official = true;
+        settings.use_custom = false;
+    }
     return settings;
 }
 
