@@ -121,7 +121,7 @@ Response curl_request(const std::string &url, std::uint64_t limit, const Sink &s
     set(CURLOPT_FOLLOWLOCATION, 0L);
     set(CURLOPT_SSL_VERIFYPEER, 1L);
     set(CURLOPT_SSL_VERIFYHOST, 2L);
-    set(CURLOPT_USERAGENT, "ProsperoStore/01.000.040");
+    set(CURLOPT_USERAGENT, "ProsperoStore/01.000.050");
     set(CURLOPT_ACCEPT_ENCODING, "identity");
     set(CURLOPT_CONNECTTIMEOUT, 10L);
     set(CURLOPT_LOW_SPEED_LIMIT, 1L);
