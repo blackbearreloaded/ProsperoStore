@@ -136,7 +136,10 @@ class ToolTests(unittest.TestCase):
             mock_make.write_text(
                 "#!/usr/bin/env bash\n"
                 "mkdir -p \"$MOCK_ROOT/dist\"\n"
-                "printf package > \"$MOCK_ROOT/dist/PPSA12345.ffpkg\"\n",
+                "printf '%s\\n' \"$*\" > \"$MOCK_ROOT/make-arguments\"\n"
+                "mkdir -p \"$MOCK_ROOT/dist/PPSA12345/sce_sys\"\n"
+                "printf app > \"$MOCK_ROOT/dist/PPSA12345/eboot.bin\"\n"
+                "printf '{}' > \"$MOCK_ROOT/dist/PPSA12345/sce_sys/param.json\"\n",
                 encoding="utf-8",
             )
             mock_make.chmod(0o755)
@@ -145,7 +148,6 @@ class ToolTests(unittest.TestCase):
             environment.update(
                 PS5_HOST="192.0.2.1",
                 DEPLOY_DRY_RUN="1",
-                DEPLOY_FORMAT="ffpkg",
                 MOCK_ROOT=str(sandbox),
                 PATH=f"{mock_bin}{os.pathsep}{environment['PATH']}",
             )
@@ -158,8 +160,27 @@ class ToolTests(unittest.TestCase):
                 text=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("/data/homebrew/PPSA12345.ffpkg", result.stdout)
+            self.assertIn("/data/homebrew/PPSA12345/\n", result.stdout)
+            self.assertIn("Would publish 2 files", result.stdout)
             self.assertIn("no network request was sent", result.stdout)
+            # The build asked for is the app folder, never an image.
+            arguments = sandbox / "make-arguments"
+            self.assertEqual(arguments.read_text(encoding="utf-8").split()[-1], "app")
+
+            # An image format is refused before anything is built.
+            arguments.unlink()
+            environment["DEPLOY_FORMAT"] = "ffpkg"
+            refused = subprocess.run(
+                ["bash", str(sandbox / "tools/deploy.sh")],
+                cwd=sandbox,
+                env=environment,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(refused.returncode, 2, refused.stdout)
+            self.assertIn("DEPLOY_FORMAT is no longer used", refused.stderr)
+            self.assertFalse(arguments.exists())
 
     def test_native_writer_anchors_relro_and_checks_load_congruence(self):
         source = (ROOT / "tooling/native/sce_module_writer.cpp").read_text(

@@ -84,15 +84,6 @@ make deps
 
 The script writes only to `.deps/native/` and never installs packages globally.
 
-## Optional package setup fails
-
-- `.ffpkg` requires Git, the .NET SDK 8 or newer, and network access on first
-  use. UFS2Tool and its build output are stored under `.deps/UFS2Tool`.
-- Folder output has neither optional dependency. Use `make app` to isolate
-  packaging from compilation.
-
-Nothing is installed globally by these optional bootstrappers.
-
 ## FTP deployment fails
 
 - Confirm `PS5_HOST` identifies the intended console and its FTP service is

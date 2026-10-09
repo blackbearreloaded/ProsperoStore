@@ -73,7 +73,6 @@ required sha256sum 'download and runtime verification'
 required git 'source and optional dependency checkout'
 optional curl 'FTP deployment'
 optional pkg-config 'PacBrew dependency resolution'
-optional dotnet 'optional .ffpkg generation'
 optional ffmpeg 'presentation-audio preparation'
 
 if [[ -f $root/sce_sys/param.json ]]; then

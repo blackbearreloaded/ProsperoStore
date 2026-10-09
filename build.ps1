@@ -9,9 +9,8 @@
 
 #requires -Version 5.1
 param(
-    [ValidateSet("Folder", "Ffpkg")]
-    [string]$OutputFormat = "Folder",
-    [switch]$Ffpkg
+    [ValidateSet("Folder")]
+    [string]$OutputFormat = "Folder"
 )
 
 $ErrorActionPreference = "Stop"
@@ -28,12 +27,6 @@ function Convert-ToWslPath([string]$Path) {
     return "/mnt/$($Matches[1].ToLowerInvariant())/$($Matches[2].Replace('\', '/'))"
 }
 
-if ($Ffpkg) {
-    if ($OutputFormat -notin @("Folder", "Ffpkg")) {
-        Fail "-Ffpkg cannot be combined with -OutputFormat $OutputFormat."
-    }
-    $OutputFormat = "Ffpkg"
-}
 if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
     Fail "WSL was not found. Install WSL and a Linux distribution first."
 }

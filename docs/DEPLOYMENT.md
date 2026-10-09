@@ -43,16 +43,15 @@ the application before deploying and do not launch it until the command
 finishes. Files removed from the local build are not deleted remotely; clean
 the title directory with `make undeploy` when an exact reset is required.
 
-Select the UFS2 image or a non-default port with Make variables:
+Select a non-default port with a Make variable:
 
 ```bash
-make deploy PS5_HOST=192.168.1.100 FTP_PORT=2121 DEPLOY_FORMAT=ffpkg
+make deploy PS5_HOST=192.168.1.100 FTP_PORT=2121
 ```
 
-Image deployment remains useful for distribution testing. An already-mounted
-image with the same pathname may remain cached by ShadowMountPlus, so folder
-deployment is the recommended repeated development workflow. Do not keep a
-folder and an image with the same title ID in scan paths at the same time.
+The app folder is the only thing deployed. Do not keep a folder and an image
+(`.ffpkg` or `.ffpfsc`, from an earlier build) with the same title ID in scan
+paths at the same time; `make undeploy` deletes such an image.
 
 Supported variables are:
 
@@ -60,13 +59,12 @@ Supported variables are:
 | --- | --- | --- |
 | `PS5_HOST` | required | Console IPv4 address or hostname |
 | `FTP_PORT` | `2121` | FTP service port |
-| `DEPLOY_FORMAT` | `folder` | `folder` or `ffpkg` output |
 | `PS5_FTP_USER` | `anonymous` | FTP username |
 | `PS5_FTP_PASSWORD` | `codex` | FTP password |
 | `DEPLOY_DRY_RUN` | `0` | Use `1` to build and print the target without networking |
 
 For repeated local work, copy `.env.example` to the ignored `.env` file and
-set `PS5_HOST`, `FTP_PORT`, and `DEPLOY_FORMAT` there. Command-line Make values
+set `PS5_HOST` and `FTP_PORT` there. Command-line Make values
 still override file defaults.
 
 For example, validate local packaging and the resolved destination without
@@ -86,7 +84,7 @@ make undeploy PS5_HOST=192.168.1.100
 ```
 
 The command validates `sce_sys/param.json`, recursively removes only
-`/data/homebrew/<TITLE_ID>/`, and deletes exact same-ID image files (`.ffpkg`, and an `.ffpfsc` left by an
+`/data/homebrew/<TITLE_ID>/`, and deletes exact same-ID image files (`.ffpkg` or `.ffpfsc`, left by an
 earlier version of this project) plus interrupted-upload temporary images. It never deletes the
 `/data/homebrew` root or another title. Preview the resolved targets without a
 network request by adding `DEPLOY_DRY_RUN=1`.
@@ -113,26 +111,18 @@ and avoids replacing a package while its previous title remains active.
 
 ## Manual build and stage
 
-1. Build the exact format accepted by your loader:
+1. Build the app folder, `dist/<TITLE_ID>/`:
 
    ```bash
-   make          # directory form
-   make ffpkg    # directory plus UFS2 image
+   make
    ```
 
-2. Choose one complete output supported by the loader:
-
-   - `dist/<TITLE_ID>/`: directory form;
-   - `dist/<TITLE_ID>.ffpkg`: UFS2 image.
-
-3. For directory deployment, stage the entire `dist/<TITLE_ID>/` tree. Do not
-   upload only `eboot.bin`.
-4. Wait for the loader to report that the title is ready, then launch it from
+2. Stage the entire `dist/<TITLE_ID>/` tree. Do not upload only `eboot.bin`.
+3. Wait for the loader to report that the title is ready, then launch it from
    the Games section of the home screen.
 
-Use `make ffpkg` only when the optional UFS2 image is needed. Rebuild
-the selected format immediately before deployment so an older package is not
-mistaken for the current application.
+Rebuild immediately before deployment so an older folder is not mistaken for
+the current application.
 
 ## Deploy a tagged-release ZIP
 
