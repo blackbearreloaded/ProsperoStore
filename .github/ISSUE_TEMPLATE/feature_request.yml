@@ -1,0 +1,32 @@
+name: "Feature request"
+description: "An idea or improvement for ProsperoStore"
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you post**
+
+        - ProsperoStore lists other people's apps. A bug inside a listed app goes to that app's own repository.
+        - A wrong or unsafe listing goes to the catalog: https://github.com/blackbearreloaded/ps5-homebrew-catalog/issues
+        - Do not post Sony SDK files, firmware, decrypted system files, keys or links to them.
+  - type: textarea
+    id: problem
+    attributes:
+      label: "What would you like to do that you cannot do now?"
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: "How could it work?"
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: "Checks"
+      options:
+        - label: "I searched the open and closed issues for this idea."
+          required: true

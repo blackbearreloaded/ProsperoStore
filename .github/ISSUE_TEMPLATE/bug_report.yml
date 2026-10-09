@@ -1,0 +1,69 @@
+name: "Bug report"
+description: "Something in ProsperoStore does not work as it should"
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you post**
+
+        - ProsperoStore lists other people's apps. A bug inside a listed app goes to that app's own repository.
+        - A wrong or unsafe listing goes to the catalog: https://github.com/blackbearreloaded/ps5-homebrew-catalog/issues
+        - Do not post Sony SDK files, firmware, decrypted system files, keys or links to them.
+  - type: input
+    id: version
+    attributes:
+      label: "App version"
+      description: "The release you installed, for example 01.000.050"
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: "PS5 system software version"
+      description: "For example 12.70"
+      placeholder: "12.70"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: "How did you install it?"
+      options:
+        - "ProsperoStore"
+        - "Manual copy (USB or FTP)"
+        - "Built from source"
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: "What happened?"
+      description: "What you saw, and what you expected instead"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to reproduce"
+      placeholder: "1. Open ... 2. Select ... 3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: "Log, screenshot or video"
+      description: "Paste the app's log if it has one. Remove anything private first."
+      render: text
+    validations:
+      required: false
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: "Checks"
+      options:
+        - label: "I searched the open and closed issues for this problem."
+          required: true
+        - label: "I am on the latest release."
+          required: true
