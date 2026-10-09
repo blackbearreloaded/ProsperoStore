@@ -201,15 +201,24 @@ jobs:
             exit 1
           fi
           (cd "$(dirname "${sums[0]}")" && sha256sum -c SHA256SUMS)
-          # A release that already exists keeps its files: the catalog records the ZIP's
-          # checksum, so a published ZIP is never replaced.
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; its files are left as they are." >&2
-            exit 1
+          TAG=$GITHUB_REF_NAME
+          # CI is the source of truth for release files: create the release, or fill one that
+          # has no ZIP yet, and never replace a ZIP that is already published.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" "${zips[0]}" "${sums[0]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --prerelease \
+              --generate-notes \
+              --title "ProsperoStore ${TAG#v} (alpha)"
+            exit 0
           fi
-          gh release create "$GITHUB_REF_NAME" "${zips[0]}" "${sums[0]}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --prerelease \
-            --generate-notes \
-            --title "ProsperoStore ${GITHUB_REF_NAME#v} (alpha)"
+          existing=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          while IFS= read -r name; do
+            if [[ $name == *.zip ]]; then
+              echo "::warning title=Release files not from this run::A release for $TAG already has a ZIP; it was not replaced. Its files were not published by this run and may have no attestation."
+              exit 0
+            fi
+          done <<< "$existing"
+          # Notes written in advance, or a draft: add the two files, leave title and notes alone.
+          gh release upload "$TAG" "${zips[0]}" "${sums[0]}" --repo "$GITHUB_REPOSITORY"

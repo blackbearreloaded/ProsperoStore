@@ -77,6 +77,21 @@ class BuildLabelTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2, removed)
             self.assertIn("usage: tools/build.sh [Folder|Ffpkg]", result.stderr)
 
+    def test_release_job_never_replaces_published_files(self):
+        workflow = (ROOT / ".github/workflows/tooling.yml").read_text(encoding="utf-8")
+        # The release job creates a release, or fills one that has no ZIP; it never replaces,
+        # deletes or rewrites anything on a release that exists.
+        for forbidden in ("--clobber", "delete-asset", "gh release edit"):
+            self.assertNotIn(forbidden, workflow)
+        publish = workflow[workflow.index("- name: Publish the pre-release") :]
+        self.assertIn('gh release create "$TAG" ', publish)
+        self.assertIn('gh release upload "$TAG" ', publish)
+        self.assertIn("--json assets --jq '.assets[].name'", publish)
+        self.assertIn("if [[ $name == *.zip ]]; then", publish)
+        self.assertIn("::warning title=Release files not from this run::", publish)
+        self.assertLess(publish.index("gh release create"), publish.index("::warning"))
+        self.assertLess(publish.index("::warning"), publish.index("gh release upload"))
+
     def test_build_checks_the_label_first_and_writes_it(self):
         build = (ROOT / "tools/build.sh").read_text(encoding="utf-8")
         self.assertIn("printf '%s\\n' \"$BUILD_LABEL\" > \"$app/build-label.txt\"", build)
