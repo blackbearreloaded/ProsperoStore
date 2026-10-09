@@ -29,7 +29,7 @@ include Makefile
 .PHONY: opengl host-snapshots foundations-check test-store
 opengl:
 	@bash tools/prepare-opengl.sh
-app ffpkg ffpfsc packages: opengl system-keyboard-imports store-worker self-update-helper
+app ffpkg: opengl system-keyboard-imports store-worker self-update-helper
 
 # The ZIP handed to people: every entry stored as 0777, so a tool that keeps the
 # archive permissions still leaves an app the console will start.

@@ -88,8 +88,6 @@ The script writes only to `.deps/native/` and never installs packages globally.
 
 - `.ffpkg` requires Git, the .NET SDK 8 or newer, and network access on first
   use. UFS2Tool and its build output are stored under `.deps/UFS2Tool`.
-- `.ffpfsc` requires Git and Python 3.9 or newer with `venv` support. MkPFS and
-  its isolated environment are stored under `.deps/MkPFS`.
 - Folder output has neither optional dependency. Use `make app` to isolate
   packaging from compilation.
 

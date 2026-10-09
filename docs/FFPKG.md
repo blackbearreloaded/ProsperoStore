@@ -4,7 +4,7 @@ Every application or package build creates and validates
 `dist/<TITLE_ID>/`. The Make targets map to the same PowerShell
 `-OutputFormat` selections:
 
-All formats remain available for local development. Tagged GitHub Releases
+Tagged GitHub Releases
 attach a ZIP of the validated directory-style application and its
 `SHA256SUMS`, and nothing else.
 
@@ -12,14 +12,10 @@ attach a ZIP of the validated directory-style application and its
 | --- | --- | --- |
 | `make app` / `Folder` | None | None |
 | `make ffpkg` / `Ffpkg` | `dist/<TITLE_ID>.ffpkg` | UFS2Tool |
-| `make ffpfsc` / `Ffpfsc` | `dist/<TITLE_ID>.ffpfsc` | MkPFS |
-| `make packages` / `All` | Both images | Both tools |
 
 ```bash
 make app
 make ffpkg
-make ffpfsc
-make packages
 ```
 
 The release workflow uses Python's standard-library `zipfile` module to archive
@@ -28,29 +24,6 @@ not another console filesystem format; extract it before directory deployment.
 
 `-Ffpkg` remains accepted as a compatibility alias for
 `-OutputFormat Ffpkg` in the Windows PowerShell frontend.
-
-## Compressed FFPFSC
-
-MkPFS creates the console-compatible, exFAT-wrapped compressed form directly
-from the validated app folder:
-
-```text
-python -m mkpfs pack folder --no-adjust-output-file-extension \
-  --version PS5 --verify \
-  <app-directory> <title.ffpfsc>
-```
-
-On first use, `tools/setup-packaging-dependencies.sh` or the equivalent
-PowerShell bootstrapper fetches the pinned
-[PSBrew/MkPFS](https://github.com/PSBrew/MkPFS) revision into the ignored
-`.deps/MkPFS` cache and installs its dependencies under that ignored checkout;
-Linux/WSL uses `.venv-linux` and PowerShell uses `.venv`. The repository does
-not distribute MkPFS source or binaries. Python 3.9 or newer with `venv`
-support is required.
-
-The build uses MkPFS's default wrapped-folder mode because upstream documents
-it as the maximum-compatibility `.ffpfsc` layout. It does not use the advanced
-direct raw-PFS mode.
 
 ## UFS2 FFPKG
 

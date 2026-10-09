@@ -118,7 +118,7 @@ Deployment uses a separate set of Make variables:
 | --- | --- | --- |
 | `PS5_HOST` | required | Console IPv4 address or hostname. |
 | `FTP_PORT` | `2121` | FTP service port. |
-| `DEPLOY_FORMAT` | `folder` | `folder`, `ffpfsc`, or `ffpkg` output. |
+| `DEPLOY_FORMAT` | `folder` | `folder` or `ffpkg` output. |
 | `PS5_FTP_USER` | `anonymous` | FTP username. |
 | `PS5_FTP_PASSWORD` | `codex` | FTP password. |
 | `DEPLOY_DRY_RUN` | `0` | Build without networking when set to `1`. |

@@ -48,6 +48,35 @@ class BuildLabelTests(unittest.TestCase):
             self.assertIn(f"      {permission}\n", build_job)
         self.assertNotIn("id-token", workflow.replace(build_job, ""))
 
+    def test_automation_builds_the_zip_only(self):
+        workflow = (ROOT / ".github/workflows/tooling.yml").read_text(encoding="utf-8")
+        self.assertIn("run: make release-zip", workflow)
+        self.assertIn('sha256sum "$TITLE_ID.zip" > SHA256SUMS', workflow)
+        # The compressed image is gone: nothing that builds may name it or its tool again.
+        build_files = (
+            ".github/workflows/tooling.yml",
+            "Makefile",
+            "GNUmakefile",
+            "build.ps1",
+            "tools/build.sh",
+            "tools/setup-packaging-dependencies.sh",
+        )
+        for name in build_files:
+            text = (ROOT / name).read_text(encoding="utf-8").lower()
+            self.assertNotIn("ffpfsc", text, name)
+            self.assertNotIn("mkpfs", text, name)
+        self.assertFalse((ROOT / "tools/setup-mkpfs-tooling.ps1").exists())
+        # Asked for by name, the removed formats are refused before anything is built.
+        for removed in ("Ffpfsc", "All"):
+            result = subprocess.run(
+                ["bash", str(ROOT / "tools/build.sh"), removed],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 2, removed)
+            self.assertIn("usage: tools/build.sh [Folder|Ffpkg]", result.stderr)
+
     def test_build_checks_the_label_first_and_writes_it(self):
         build = (ROOT / "tools/build.sh").read_text(encoding="utf-8")
         self.assertIn("printf '%s\\n' \"$BUILD_LABEL\" > \"$app/build-label.txt\"", build)

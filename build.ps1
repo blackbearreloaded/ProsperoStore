@@ -9,7 +9,7 @@
 
 #requires -Version 5.1
 param(
-    [ValidateSet("Folder", "Ffpkg", "Ffpfsc", "All")]
+    [ValidateSet("Folder", "Ffpkg")]
     [string]$OutputFormat = "Folder",
     [switch]$Ffpkg
 )

@@ -8,7 +8,6 @@
 | [ps5-payload-dev/pacbrew-repo](https://github.com/ps5-payload-dev/pacbrew-repo) | Optional prebuilt PS5 ports and static libraries |
 | [SvenGDK/SharpProspero](https://github.com/SvenGDK/SharpProspero) | Source of the ELF converter and FSELF writer in `tooling/native/` (GPL-3.0) |
 | [SvenGDK/UFS2Tool](https://github.com/SvenGDK/UFS2Tool) | Optional UFS2 `.ffpkg` generation |
-| [PSBrew/MkPFS](https://github.com/PSBrew/MkPFS) | Optional compressed `.ffpfsc` generation |
 | [sinajet/PSFFPKG](https://github.com/sinajet/PSFFPKG) | Public `.ffpkg` procedure used as a format reference |
 | [LLVM/Clang](https://github.com/llvm/llvm-project) | Native compiler |
 | [GoogleTest](https://github.com/google/googletest) | Pinned host-only C++ unit-test framework |
@@ -86,15 +85,6 @@ When `.ffpkg` output is requested, the platform bootstrapper fetches
 `b5307a60d5b4e3a68ba680e0e33cfadf05017c77` into the ignored
 `.deps/UFS2Tool` cache and builds it with the host .NET SDK. UFS2Tool is
 BSD-2-Clause software and is not distributed by this repository.
-
-## Optional MkPFS dependency
-
-When `.ffpfsc` output is requested, the platform bootstrapper fetches
-[PSBrew/MkPFS](https://github.com/PSBrew/MkPFS) at commit
-`6cb8313dfe0c988ac52617794553f343243d3a56` into the ignored `.deps/MkPFS`
-cache and installs its Python dependencies into an ignored virtual environment
-there. MkPFS and its dependencies retain their own licenses and are not
-distributed by this repository.
 
 ## Independently authored runtime shim
 

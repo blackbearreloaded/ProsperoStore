@@ -43,10 +43,9 @@ the application before deploying and do not launch it until the command
 finishes. Files removed from the local build are not deleted remotely; clean
 the title directory with `make undeploy` when an exact reset is required.
 
-Select an image or a non-default port with Make variables:
+Select the UFS2 image or a non-default port with Make variables:
 
 ```bash
-make deploy PS5_HOST=192.168.1.100 DEPLOY_FORMAT=ffpfsc
 make deploy PS5_HOST=192.168.1.100 FTP_PORT=2121 DEPLOY_FORMAT=ffpkg
 ```
 
@@ -61,7 +60,7 @@ Supported variables are:
 | --- | --- | --- |
 | `PS5_HOST` | required | Console IPv4 address or hostname |
 | `FTP_PORT` | `2121` | FTP service port |
-| `DEPLOY_FORMAT` | `folder` | `folder`, `ffpfsc`, or `ffpkg` output |
+| `DEPLOY_FORMAT` | `folder` | `folder` or `ffpkg` output |
 | `PS5_FTP_USER` | `anonymous` | FTP username |
 | `PS5_FTP_PASSWORD` | `codex` | FTP password |
 | `DEPLOY_DRY_RUN` | `0` | Use `1` to build and print the target without networking |
@@ -87,8 +86,8 @@ make undeploy PS5_HOST=192.168.1.100
 ```
 
 The command validates `sce_sys/param.json`, recursively removes only
-`/data/homebrew/<TITLE_ID>/`, and deletes exact same-ID `.ffpkg` and `.ffpfsc`
-files plus interrupted-upload temporary images. It never deletes the
+`/data/homebrew/<TITLE_ID>/`, and deletes exact same-ID image files (`.ffpkg`, and an `.ffpfsc` left by an
+earlier version of this project) plus interrupted-upload temporary images. It never deletes the
 `/data/homebrew` root or another title. Preview the resolved targets without a
 network request by adding `DEPLOY_DRY_RUN=1`.
 
@@ -119,21 +118,19 @@ and avoids replacing a package while its previous title remains active.
    ```bash
    make          # directory form
    make ffpkg    # directory plus UFS2 image
-   make ffpfsc   # directory plus compressed image
    ```
 
 2. Choose one complete output supported by the loader:
 
    - `dist/<TITLE_ID>/`: directory form;
-   - `dist/<TITLE_ID>.ffpkg`: UFS2 image;
-   - `dist/<TITLE_ID>.ffpfsc`: compressed image.
+   - `dist/<TITLE_ID>.ffpkg`: UFS2 image.
 
 3. For directory deployment, stage the entire `dist/<TITLE_ID>/` tree. Do not
    upload only `eboot.bin`.
 4. Wait for the loader to report that the title is ready, then launch it from
    the Games section of the home screen.
 
-Use `make packages` only when both optional image formats are needed. Rebuild
+Use `make ffpkg` only when the optional UFS2 image is needed. Rebuild
 the selected format immediately before deployment so an older package is not
 mistaken for the current application.
 

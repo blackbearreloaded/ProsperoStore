@@ -128,7 +128,7 @@ steps spelled out.
    APP_WRAP_SYMBOLS += fcntl
    APP_ROOT_FILES += build/self-update/self-updater.elf
 
-   app ffpkg ffpfsc packages: self-update-helper
+   app ffpkg: self-update-helper
    ```
 
    `make self-update-helper` builds `build/self-update/self-updater.elf` from
@@ -317,7 +317,7 @@ APP_WRAP_SYMBOLS += fcntl
 APP_ROOT_FILES += build/self-update/self-updater.elf
 
 # 3. At the end of the Makefile: build the helper before the app is packaged.
-app ffpkg ffpfsc packages: self-update-helper
+app ffpkg: self-update-helper
 ```
 
 ```bash

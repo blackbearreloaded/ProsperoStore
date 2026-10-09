@@ -10,8 +10,8 @@ set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 format=${1:-Folder}
 format=${format,,}
-case "$format" in folder|ffpkg|ffpfsc|all) ;; *)
-    echo "usage: tools/build.sh [Folder|Ffpkg|Ffpfsc|All]" >&2
+case "$format" in folder|ffpkg) ;; *)
+    echo "usage: tools/build.sh [Folder|Ffpkg]" >&2
     exit 2
 esac
 # What a build that is not a release calls itself, such as a pull request's number and
@@ -350,7 +350,7 @@ done
 printf '==> [zip] Archiving the application folder\n'
 (cd "$dist" && python3 -m zipfile -c "$title_id.zip" "$title_id")
 
-if [[ $format == ffpkg || $format == all ]]; then
+if [[ $format == ffpkg ]]; then
     ufs2tool=$(bash "$root/tools/setup-packaging-dependencies.sh" ffpkg)
     rm -f -- "$dist/$title_id.ffpkg"
     "$ufs2tool" makefs -S 4096 -b 20% -t ffs \
@@ -364,14 +364,7 @@ with open(sys.argv[1], "rb") as stream:
         raise SystemExit("FFPKG is missing the UFS2 superblock magic")
 PY
 fi
-if [[ $format == ffpfsc || $format == all ]]; then
-    mkpfs=$(bash "$root/tools/setup-packaging-dependencies.sh" ffpfsc)
-    rm -f -- "$dist/$title_id.ffpfsc"
-    "$mkpfs" pack folder --no-adjust-output-file-extension \
-        --version PS5 --verify "$app" "$dist/$title_id.ffpfsc"
-fi
 
 printf 'Build complete.\nApp folder: %s\n' "$app"
 printf 'Folder ZIP: %s\n' "$dist/$title_id.zip"
-[[ $format != ffpkg && $format != all ]] || printf 'FFPKG:     %s\n' "$dist/$title_id.ffpkg"
-[[ $format != ffpfsc && $format != all ]] || printf 'FFPFSC:    %s\n' "$dist/$title_id.ffpfsc"
+[[ $format != ffpkg ]] || printf 'FFPKG:     %s\n' "$dist/$title_id.ffpkg"

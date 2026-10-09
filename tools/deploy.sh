@@ -22,8 +22,8 @@ password=${PS5_FTP_PASSWORD:-codex}
     echo "usage: tools/deploy.sh [undeploy]" >&2
     exit 2
 }
-[[ $action == undeploy || $format == folder || $format == ffpfsc || $format == ffpkg ]] || {
-    echo "DEPLOY_FORMAT must be folder, ffpfsc, or ffpkg" >&2
+[[ $action == undeploy || $format == folder || $format == ffpkg ]] || {
+    echo "DEPLOY_FORMAT must be folder or ffpkg" >&2
     exit 2
 }
 [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || {
@@ -111,6 +111,7 @@ with FTP() as ftp:
     ftp.connect(host, int(port), timeout=15)
     ftp.login(user, password)
     removed = remove_entry(ftp, join(homebrew_root, title_id))
+    # .ffpfsc: an image left by an earlier version of this project, which built one.
     for suffix in ("ffpkg", "ffpfsc"):
         removed |= remove_entry(ftp, join(homebrew_root, f"{title_id}.{suffix}"))
         removed |= remove_entry(ftp, join(homebrew_root, f".{title_id}.{suffix}.upload"))
@@ -265,6 +266,7 @@ with FTP() as ftp:
         print("==> [deploy] Uploading complete image under a temporary name")
         with artifact.open("rb") as source:
             ftp.storbinary(f"STOR {temporary}", source, blocksize=256 * 1024)
+        # .ffpfsc: an image left by an earlier version of this project, which built one.
         for suffix in ("ffpfsc", "ffpkg"):
             old_name = f"{title_id}.{suffix}"
             if remove_if_present(ftp, join(homebrew_root, old_name)):
