@@ -22,8 +22,10 @@ std::vector<std::string> trace_lines();
 // Where the trace file is being written ("" when nowhere could be written).
 std::string trace_file();
 
-// The checks a report needs, before and after elevation: firmware, clock, the
-// app's folder, /data access, the payload loader on port 9021.
+// Firmware and clock: two lines every report needs, cheap enough to keep always.
+void trace_firmware();
+// The checks a report needs, before and after elevation (or when the log is switched on
+// later): the app's folder, /data access, the payload loader on port 9021.
 void trace_console(const char *when);
 // One HEAD request to homebrew.page through libcurl, with every step curl reports.
 void curl_probe(const char *when);

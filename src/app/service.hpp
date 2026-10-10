@@ -87,6 +87,9 @@ class Service
     bool request_adopt(const catalog::Entry &entry, const std::string &location);
     // The settings file, written by a worker: never on the frame.
     bool save_settings(std::string text);
+    // Where settings are kept; empty means the store folder's settings.txt. Set before
+    // start() when settings can be kept although the store has no folder of its own.
+    std::string settings_file;
     bool cancel_job(const std::string &id);
     bool job(JobView &view);
     // The titles running now, refreshed every two seconds by the installer's
@@ -121,6 +124,7 @@ class Service
     bool enqueue(Job job);
     // notes: what the user should check in ShadowMountPlus's settings, in plain words.
     bool load_policy(system::ScanPolicy &policy, std::vector<std::string> *notes = nullptr) const;
+    std::string settings_path() const;
     std::string root_, version_;
     net::Control control_;
     net::Control icon_control_;

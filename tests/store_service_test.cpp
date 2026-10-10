@@ -293,6 +293,16 @@ int main()
     closing.stop();
     std::string saved;
     assert(hui::save::read_file(root + "/settings.txt", &saved) && saved == settings);
+    // A store without a folder of its own (not elevated) still keeps settings where it was
+    // told it can write them.
+    store::Service sandboxed("");
+    sandboxed.settings_file = root + "/sandboxed-settings.txt";
+    assert(sandboxed.start());
+    while (!sandboxed.save_settings("debug=1\n"))
+        std::this_thread::sleep_for(1ms);
+    sandboxed.stop();
+    saved.clear();
+    assert(hui::save::read_file(root + "/sandboxed-settings.txt", &saved) && saved == "debug=1\n");
     std::filesystem::remove_all(root);
     check_installer();
 }
