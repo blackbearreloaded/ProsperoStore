@@ -1,0 +1,38 @@
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Build cache
+
+# Publishes the compiler cache of a build as the snapshot that later builds start from: the file
+# ccache-clang18.tar of the build-cache release. It runs after a "Build" run that was started by
+# hand on main with "snapshot" ticked (that run leaves the cache as its ccache-snapshot artifact).
+# The build workflow itself never writes to a release that already has files.
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    name: Publish the compiler cache snapshot
+    if: >-
+      github.event.workflow_run.event == 'workflow_dispatch' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == github.event.repository.default_branch
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Replace the snapshot in the build-cache release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          if ! gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name ccache-snapshot --dir snapshot; then
+            echo "That run kept no snapshot (the box was not ticked)."
+            exit 0
+          fi
+          gh release upload build-cache "snapshot/ccache-clang18.tar" --clobber --repo "$GITHUB_REPOSITORY"

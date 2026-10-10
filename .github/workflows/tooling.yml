@@ -78,7 +78,7 @@ jobs:
 
       # GitHub drops a cache nobody used for a week, and a pull request only sees main's. When
       # nothing was restored, start from the snapshot kept as a file of the build-cache release;
-      # a manual run with "snapshot" ticked replaces that file.
+      # a manual run on main with "snapshot" ticked replaces that file (build-cache.yml).
       - name: Fetch the compiler cache snapshot
         run: |
           if [ -z "$(ls -A "$CCACHE_DIR" 2>/dev/null)" ]; then
@@ -201,24 +201,6 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
-
-  # Only a run started by hand reaches this job, so a pull request never writes what later
-  # builds start from; the build job itself cannot write to a release.
-  snapshot:
-    name: Publish the compiler cache snapshot
-    if: github.event_name == 'workflow_dispatch' && inputs.snapshot
-    needs: build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-      actions: read
-    steps:
-      - name: Replace the snapshot in the build-cache release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name ccache-snapshot --dir snapshot
-          gh release upload build-cache "snapshot/ccache-clang18.tar" --clobber --repo "$GITHUB_REPOSITORY"
 
   release:
     name: GitHub release
