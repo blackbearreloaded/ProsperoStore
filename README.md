@@ -191,6 +191,72 @@ rollback protection. Signature checks off also disables sequence rollback checks
 so development feeds can rebuild with a lower sequence. Store update notices use
 the selected catalog, and app QR codes use its `page` URLs.
 
+## Roadmap
+
+Ideas for what a solid app store should do, in no promised order. Some need changes to the
+[catalog](https://github.com/blackbearreloaded/ps5-homebrew-catalog) as well as to the store.
+
+### Versions and updates
+
+- **Install an older version** - pick a past release on an app's page and install it; an app held
+  at a version is left alone by Update all.
+- **Roll back in one press** - put back the previous version the store already keeps after an
+  update, with the files you had inside it.
+- **Skip or hold updates** - "don't offer this update" or "never update", for each app.
+- **What's new before updating** - the release notes for every app in the Updates list, as the
+  store already shows for itself.
+- **Automatic updates** - optionally update apps when the store opens, all of them or only the ones
+  you mark.
+
+### Finding apps
+
+- **Categories and tags** - emulators, media, streaming, utilities, beyond App, Game and Tool.
+- **Collections** - curated shelves such as "Start here" or "Emulators".
+- **Screenshots** - pictures of the app on its page.
+- **Popularity** - download counts, and sorting by them.
+- **Favourites** - a list kept on the console.
+- **Search in descriptions** - not only names and developers.
+
+### Trust and safety
+
+- **What an app does outside its sandbox** - a short list on its page, from the catalog's scan of
+  each release.
+- **Firmware and requirements** - which firmware an app was tested on and what it needs
+  (ShadowMountPlus version, Lapy, extra files), checked before installing.
+- **Report a problem with an app** - a QR code to the app's issue page, with the console's firmware
+  and the app's version filled in.
+
+### Managing what is installed
+
+- **Storage view** - the size of each app, the previous versions the store keeps and its caches,
+  with a way to clear each.
+- **Move an app** - between the console's storage, a USB drive and the extended drive.
+- **App data** - show where an app keeps its data, and offer to remove it when uninstalling.
+- **Back up and restore app data** - to a USB drive.
+- **Repair** - check an installed app against the catalog and reinstall it when it differs.
+- **Export the installed list** - and install everything again on another console.
+
+### Downloads
+
+- **Resume interrupted downloads** - large apps start again from zero today.
+- **Queue controls** - reorder, pause and retry.
+- **Install from a USB drive or a local ZIP** - checked against the catalog when the app is listed.
+- **A notification when a download finishes** - through the PS5's own notifications.
+
+### For developers
+
+- **Beta channel** - opt in to an app's pre-releases.
+- **Install a test build** - from a pull request or an address, in Development options.
+- **Announcements** - a short message from the catalog shown when the store opens.
+
+### Polish
+
+- **Other languages** - follow the PS5's language, as ProsperoEden does.
+- **First-run check** - a screen that tests elevation, ShadowMountPlus settings and the network,
+  and says what to fix.
+- **Open after installing (investigation)** - start an app from the store, if the console allows
+  one title to launch another.
+
 ## Known limits of this version
 
 - ZIP apps only; image files (ffpfsc) are listed but can't be installed.
