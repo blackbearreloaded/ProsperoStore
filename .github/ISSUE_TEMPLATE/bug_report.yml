@@ -1,3 +1,6 @@
+# ProsperoStore - GitHub form: bug_report.yml
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
 name: "Bug report"
 description: "Something in ProsperoStore does not work as it should"
 title: "[Bug] "
