@@ -173,20 +173,22 @@ std::string trace_file()
     return file;
 }
 
+void trace_firmware()
+{
+    SwVersion version{sizeof(SwVersion), {}, 0};
+    const int read = sceKernelGetSystemSwVersion(&version);
+    trace("firmware: %s (0x%08x)", read == 0 ? version.text : "unknown",
+          static_cast<unsigned>(version.version));
+    const std::time_t now = std::time(nullptr);
+    char clock[32];
+    std::strftime(clock, sizeof(clock), "%Y-%m-%d %H:%M UTC", std::gmtime(&now));
+    trace("console clock: %s", clock);
+}
+
 void trace_console(const char *when)
 {
-    if (std::strcmp(when, "start") == 0)
-    {
-        SwVersion version{sizeof(SwVersion), {}, 0};
-        const int read = sceKernelGetSystemSwVersion(&version);
-        trace("firmware: %s (0x%08x)", read == 0 ? version.text : "unknown",
-              static_cast<unsigned>(version.version));
-        const std::time_t now = std::time(nullptr);
-        char clock[32];
-        std::strftime(clock, sizeof(clock), "%Y-%m-%d %H:%M UTC", std::gmtime(&now));
-        trace("console clock: %s", clock);
+    if (std::strcmp(when, "after elevation") != 0)
         trace("payload loader on port 9021: %s", probe_loader().c_str());
-    }
     struct stat info
     {
     };

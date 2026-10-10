@@ -3181,7 +3181,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
     {
         settings_.debug_log = !settings_.debug_log;
         if (settings_.debug_log)
-            notify("Debug log is on", "Reopen the store, repeat the problem, then open About.");
+            notify("Debug log is on", "Repeat the problem, then open About.");
     }
     else if (setting == 11)
     {

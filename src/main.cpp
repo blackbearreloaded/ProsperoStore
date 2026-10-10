@@ -30,6 +30,8 @@
 #include "platform/ps5/system.hpp"
 #include "../examples/sandbox-elevation/elevation.hpp"
 
+#include <unistd.h>
+#include <fcntl.h>
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -122,6 +124,7 @@ int main()
     };
     store::diag::set_enabled(debug_wanted());
     store::diag::trace("ProsperoStore started");
+    store::diag::trace_firmware();
     store::diag::trace("keyboard library 0x%08x, usb keyboards 0x%08x, title registry 0x%08x",
                        static_cast<unsigned>(keyboard_module),
                        static_cast<unsigned>(keyboards_ready), static_cast<unsigned>(registry));
@@ -169,7 +172,8 @@ int main()
     store::diag::trace("elevation stopped at: %s, value %d (0x%08x)", elevation::step(),
                        elevation::step_code(), static_cast<unsigned>(elevation::step_code()));
     store::diag::set_enabled(debug_wanted());
-    if (store::diag::enabled())
+    const bool debug_at_start = store::diag::enabled();
+    if (debug_at_start)
     {
         store::diag::trace_console("after elevation");
         if (elevated)
@@ -241,10 +245,31 @@ int main()
     store::Service service(elevated ? storage_root : "", own_version);
     screen.set_self("PPSA99000", own_version);
     {
-        // What the player chose last time; the defaults when there is no file.
+        // What the player chose last time; the defaults when there is no file. A store left in
+        // its sandbox keeps them too where /data is shown to it (ShadowMountPlus does that):
+        // Debug log has to survive a restart on exactly those consoles.
+        const std::string settings_file = std::string(storage_root) + "/settings.txt";
+        if (!elevated)
+        {
+            (void)mkdir(storage_root, 0777);
+            const std::string probe = std::string(storage_root) + "/.settings-probe";
+            const int descriptor = open(probe.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+            if (descriptor >= 0)
+            {
+                close(descriptor);
+                unlink(probe.c_str());
+                service.settings_file = settings_file;
+            }
+            sys::log("[STORE] settings without elevation: %s",
+                     descriptor >= 0 ? "kept in the store folder" : "nowhere to keep them");
+#ifdef STORE_DEBUG_TRACE
+            store::diag::trace("settings: %s", descriptor >= 0
+                                                   ? "kept in /data/prosperostore (no elevation)"
+                                                   : "can't be kept (no store folder)");
+#endif
+        }
         std::string saved;
-        if (elevated)
-            save::read_file(std::string(storage_root) + "/settings.txt", &saved, 4096);
+        save::read_file(settings_file, &saved, 4096);
         screen.set_settings(store::parse_settings(saved));
         service.check_updates = screen.settings().check_updates;
         // The custom catalog only when it is switched on; the official one is always signed.
@@ -875,6 +900,12 @@ int main()
                 if (wanted)
                     store::diag::set_enabled(true);
                 store::diag::trace("debug log switched %s in Settings", wanted ? "on" : "off");
+                // Switched on while running: the console checks a start with it on would
+                // have made, so the report is complete without reopening the store.
+                static bool checked = false;
+                if (wanted && !checked && !debug_at_start)
+                    store::diag::trace_console("switched on");
+                checked = checked || wanted;
                 if (!wanted)
                     store::diag::set_enabled(false);
                 if (!wanted)

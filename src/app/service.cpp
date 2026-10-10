@@ -75,9 +75,9 @@ void Service::stop()
     icons_started_ = false;
     started_ = false;
     // A user may change the feed and close while the initial refresh is still retrying.
-    if (settings_pending_ && !root_.empty())
+    if (settings_pending_ && !settings_path().empty())
     {
-        const auto error = hui::save::write_atomic(root_ + "/settings.txt", settings_);
+        const auto error = hui::save::write_atomic(settings_path(), settings_);
         if (!error.empty())
             hui::sys::log("[STORE] settings save failed: %s", error.c_str());
         settings_pending_ = false;
@@ -259,6 +259,13 @@ bool Service::enqueue(Job job)
     if (job_id_ != job.entry.id && std::none_of(jobs_.begin(), jobs_.end(), same))
         jobs_.push_back(std::move(job));
     return true;
+}
+
+std::string Service::settings_path() const
+{
+    if (!settings_file.empty())
+        return settings_file;
+    return root_.empty() ? std::string() : root_ + "/settings.txt";
 }
 
 bool Service::save_settings(std::string text)
@@ -804,9 +811,11 @@ void Service::run()
         }
         if (save)
         {
-            const auto error = root_.empty()
-                                   ? "Store storage is unavailable"
-                                   : hui::save::write_atomic(root_ + "/settings.txt", settings);
+            const auto error =
+                settings_path().empty()
+                    ? "This console gave the store nowhere to keep them. They last until you "
+                      "close the store."
+                    : hui::save::write_atomic(settings_path(), settings);
             if (!error.empty())
             {
                 Update notice;
