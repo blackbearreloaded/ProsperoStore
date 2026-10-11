@@ -351,6 +351,8 @@ void Screen::rebuild()
         if (!query.empty() && app.folded_name.find(query) == std::string::npos &&
             app.folded_author.find(query) == std::string::npos)
             continue;
+        if (!developer_.empty() && (app.local_only || app.author != developer_))
+            continue;
         for (int section = 0; section < kSections; ++section)
             counts_[section] += in_section(app, section) ? 1 : 0;
         if (in_section(app, section_))
@@ -583,6 +585,7 @@ void Screen::set_query(std::string query)
 {
     query_ = std::move(query);
     focus_ = 0;
+    developer_.clear();
     rebuild();
     if (!visible_.empty())
         zone_ = Zone::grid;
@@ -799,7 +802,7 @@ std::vector<std::string> Screen::artwork() const
 
 bool Screen::discover() const
 {
-    return section_ == 0 && query_.empty();
+    return section_ == 0 && query_.empty() && developer_.empty();
 }
 int Screen::shelf_of(int index) const
 {
@@ -904,6 +907,7 @@ void Screen::step_section(int delta, bool repeat, ui::Feedback &feedback)
         return refuse(feedback, repeat, static_cast<float>(delta), 0.0f);
     section_ = next;
     focus_ = 0;
+    developer_.clear();
     rebuild();
     swap_.start(0.4f);
     feedback.play(audio::Cue::tab, 0.92f + 0.04f * static_cast<float>(next),
@@ -1144,6 +1148,8 @@ void Screen::update_home(const InputFrame &input, ui::Feedback &feedback)
             focus_ = shelves_.front().start + shelves_.front().pos;
         else if (zone_ == Zone::grid && !discover() && focus_ >= kColumns)
             focus_ %= kColumns;
+        else if (!developer_.empty())
+            close_developer();
         else
             return; // At the top Circle does nothing: the store is closed from the console.
         feedback.play(audio::Cue::back);
@@ -1212,8 +1218,57 @@ void Screen::update_page(const InputFrame &input, ui::Feedback &feedback)
         refresh_detail();
         feedback.play(audio::Cue::select);
     }
+    else if (input.is_pressed(Action::r3) && !shown.local_only && !shown.author.empty())
+    {
+        const std::string author = shown.author;
+        open_developer(author);
+        feedback.play(audio::Cue::select);
+    }
     else
         article_.handle(input, feedback);
+}
+
+bool Screen::open_developer(const std::string &author)
+{
+    if (author.empty())
+        return false;
+    // Their link comes from whichever of their apps has its details here: the page this was
+    // opened from, first.
+    const std::string from = focused() ? focused()->title_id : std::string();
+    developer_link_.clear();
+    developer_support_ = false;
+    for (int pass = 0; pass < 2 && developer_link_.empty(); ++pass)
+        for (const auto &app : apps_)
+            if (app.author == author && app.detail && (pass == 1 || app.title_id == from))
+            {
+                developer_link_ = catalog::developer_link(*app.detail, developer_support_);
+                if (!developer_link_.empty())
+                    break;
+            }
+    developer_ = author;
+    details_ = false;
+    section_ = 0;
+    query_.clear();
+    focus_ = 0;
+    rebuild();
+    // The page closes back into the tile it was opened from.
+    for (std::size_t k = 0; k < visible_.size(); ++k)
+        if (apps_[visible_[k]].title_id == from)
+            focus_ = static_cast<int>(k);
+    if (!visible_.empty())
+        zone_ = Zone::grid;
+    if (!developer_link_.empty() && developer_link_ != developer_qr_link_)
+        pending_developer_link = developer_link_;
+    swap_.start(0.3f);
+    return !visible_.empty();
+}
+
+void Screen::close_developer()
+{
+    developer_.clear();
+    focus_ = 0;
+    rebuild();
+    swap_.start(0.3f);
 }
 
 void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
@@ -1758,14 +1813,32 @@ void Screen::draw_stage(const ui::Fonts &fonts)
 void Screen::draw_section_header(const ui::Fonts &fonts)
 {
     auto &list = scene_;
-    const std::string title =
-        query_.empty() ? std::string(kSectionNames[section_]) : "Results for \"" + query_ + "\"";
+    const std::string title = !developer_.empty() ? "By " + developer_
+                              : query_.empty()    ? std::string(kSectionNames[section_])
+                                                  : "Results for \"" + query_ + "\"";
     const float w = ui::text(list, fonts.display, fonts.display.font->fit(title, 60, 1100.0f),
                              kMargin - 3.0f, kHeaderY, 60, kInk);
     ui::text(list, fonts.mono, std::to_string(visible_.size()), kMargin + w + 18.0f, kHeaderY, 26,
              kInk.with_alpha(0.5f));
     const bool all = section_ == 6 && !visible_.empty() && installer_ && guard_;
-    if (all)
+    if (!developer_.empty())
+    {
+        // The developer's code, where the sorting is said on other pages.
+        if (developer_qr_ != 0 && !developer_link_.empty() && developer_qr_link_ == developer_link_)
+        {
+            const Rect code{kRight - 84.0f, kHeaderY - 62.0f, 84.0f, 84.0f};
+            list.rounded_rect(code.inset(-6.0f), 12, kWhite);
+            list.image(developer_qr_, code, gfx::kFullUv, kWhite);
+            const std::string line = developer_support_ ? "Scan to support this developer"
+                                                        : "Scan for this developer's page";
+            ui::text(list, fonts.semibold, line, code.x - 24.0f, kHeaderY - 26.0f, 20,
+                     kInk.with_alpha(0.86f), gfx::Align::right);
+            ui::text(list, fonts.mono, fonts.mono.font->fit(developer_link_, 17, 520.0f),
+                     code.x - 24.0f, kHeaderY + 4.0f, 17, kInk.with_alpha(0.55f),
+                     gfx::Align::right);
+        }
+    }
+    else if (all)
     {
         const auto glyphs = ui::GlyphStyle::dark();
         const float tw = fonts.semibold.measure("Update all", 22);
@@ -2034,6 +2107,7 @@ bool Screen::open_app(const std::string &id)
 {
     section_ = 0;
     query_.clear();
+    developer_.clear();
     rebuild();
     for (std::size_t k = 0; k < visible_.size(); ++k)
         if (apps_[visible_[k]].title_id == id)
@@ -2836,7 +2910,7 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
 
     const auto glyphs = ui::GlyphStyle::dark();
     const bool all = section_ == 6 && !visible_.empty() && installer_ && guard_;
-    ui::Hint home[6];
+    ui::Hint home[7];
     int homes = 0;
     if (!visible_.empty())
         home[homes++] = {ui::Button::cross, "Details"};
@@ -2847,9 +2921,11 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
     if (!all)
         home[homes++] = {ui::Button::square, "Downloads"};
     home[homes++] = {ui::Button::l1, "Sections", ui::Button::r1};
+    if (!developer_.empty())
+        home[homes++] = {ui::Button::circle, "All apps"};
     // The page's row names the one thing Cross does for this app, when it can.
     const Offer state = focused() ? offer(*focused()) : Offer{};
-    ui::Hint detail[5];
+    ui::Hint detail[6];
     int details = 0;
     if (state.armed)
         detail[details++] = {ui::Button::cross, state.label.c_str()};
@@ -2858,6 +2934,8 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
     detail[details++] = {ui::Button::dpad, "Scroll"};
     if (focused() && !focused()->local_only)
         detail[details++] = {ui::Button::triangle, "Refresh"};
+    if (focused() && !focused()->local_only && !focused()->author.empty())
+        detail[details++] = {ui::Button::right_stick, "More by this developer"};
     detail[details++] = {ui::Button::circle, "Back"};
     // A hint row leaves as the next layer arrives, so two are never legible at once.
     scene_.push_opacity(1.0f - tween::clamp01(page * 3.0f));

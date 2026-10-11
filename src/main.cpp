@@ -8,6 +8,7 @@
 #include "audio/music.hpp"
 #include "core/frame_stats.hpp"
 #include "core/image.hpp"
+#include "core/qr.hpp"
 #include "core/version.hpp"
 #include "core/save_file.hpp"
 #include "diag/diagnostics.hpp"
@@ -553,6 +554,22 @@ int main()
         }
         if (!screen.pending_detail.empty() && service.request_detail(screen.pending_detail))
             screen.pending_detail.clear();
+        if (!screen.pending_developer_link.empty())
+        {
+            // One code at a time: the last developer's page that was opened.
+            static std::uint32_t developer_code = 0;
+            const std::string link = std::move(screen.pending_developer_link);
+            screen.pending_developer_link.clear();
+            Image code;
+            if (hui::encode_qr(link, code))
+            {
+                if (developer_code)
+                    glDeleteTextures(1, &developer_code);
+                developer_code =
+                    renderer.batch().create_texture(code.width, code.height, code.rgba.data());
+                screen.set_developer_qr(link, developer_code);
+            }
+        }
         // The page's request goes to the installer; one refused by a busy lock is asked again.
         if (auto &order = screen.pending_order; order.kind != store::Order::Kind::none)
         {

@@ -106,6 +106,19 @@ std::uint32_t small_count(yyjson_val *object, const char *key)
                : 0;
 }
 
+// An address a code may carry: HTTPS, a host, printable characters only.
+bool link_url(std::string_view url)
+{
+    if (!url.starts_with("https://") || url.size() < 12 || url.size() > 512)
+        return false;
+    if (std::any_of(url.begin(), url.end(), [](unsigned char c)
+                    { return c <= 32 || c >= 127 || c == '\\' || c == '"' || c == '<'; }))
+        return false;
+    const auto end = url.find('/', 8);
+    const auto name = url.substr(8, end == std::string_view::npos ? end : end - 8);
+    return name.find('.') != std::string_view::npos && name.find('@') == std::string_view::npos;
+}
+
 bool read_entry(yyjson_val *value, Entry &entry, bool detail)
 {
     if (!yyjson_is_obj(value) || !field(value, "titleid", entry.id, 9, true) ||
@@ -155,6 +168,17 @@ bool read_entry(yyjson_val *value, Entry &entry, bool detail)
         !field(value, "sha256", entry.digest, 64, entry.status == "available") ||
         !field(value, "release_notes", entry.release_notes, 32768))
         return false;
+    // Advice for the developer's page; an address this version can't use is left out.
+    for (const auto &[key, into] :
+         {std::pair<const char *, std::string *>{"author_url", &entry.author_url},
+          {"donate_url", &entry.donate_url}})
+    {
+        std::string address;
+        if (auto *member = yyjson_obj_get(value, key); member && yyjson_is_str(member))
+            address.assign(yyjson_get_str(member), yyjson_get_len(member));
+        if (address.size() <= 512 && link_url(address))
+            *into = std::move(address);
+    }
     std::array<std::uint8_t, 32> digest{};
     return entry.status != "available" || hex_bytes(entry.digest, digest);
 }
@@ -171,6 +195,27 @@ std::string_view host(std::string_view url)
     return url.substr(8, slash - 8);
 }
 } // namespace
+
+std::string developer_link(const Entry &entry, bool &support)
+{
+    support = !entry.donate_url.empty() && link_url(entry.donate_url);
+    if (support)
+        return entry.donate_url;
+    if (!entry.author_url.empty() && link_url(entry.author_url))
+        return entry.author_url;
+    // The owner of the source repository, on the hosts whose first path part is the owner.
+    for (const std::string_view site :
+         {"https://github.com/", "https://gitlab.com/", "https://codeberg.org/"})
+        if (std::string_view(entry.source).starts_with(site))
+        {
+            const auto owner = std::string_view(entry.source).substr(site.size());
+            const auto end = owner.find('/');
+            const std::string link = std::string(site) + std::string(owner.substr(0, end));
+            if (end != 0 && !owner.empty() && link_url(link))
+                return link;
+        }
+    return {};
+}
 
 bool title_id(std::string_view value)
 {
