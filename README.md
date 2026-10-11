@@ -115,7 +115,8 @@ logs), outside the app's folder, so updates keep it.
 | Move | D-pad or left stick | Arrows |
 | Open, install, update | Cross | Enter or Space |
 | Back, close | Circle | Escape or Backspace |
-| Previous / next section | L1 / R1 | Shift+Tab / Tab, or Page Up / Page Down |
+| Previous / next section (they go round) | L1 / R1 | Shift+Tab / Tab, or Page Up / Page Down |
+| Close ProsperoStore | Hold Circle on the home page | Hold Escape |
 | Search | Triangle | / or F3 |
 | Downloads; hold to uninstall on an app's page | Square | Delete or F2 |
 | Settings | Options | F10 or the Menu key |

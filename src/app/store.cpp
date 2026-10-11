@@ -83,6 +83,9 @@ constexpr float kInfoW = 900.0f;
 constexpr Rect kActionBox{1336.0f, 212.0f, 488.0f, 604.0f};
 constexpr Rect kPageHero{96.0f, 84.0f, 212.0f, 212.0f}; // the icon, when it is the app's picture
 constexpr float kButtonRadius = 18.0f;
+// Closing with Circle: the bar appears after a moment, so a tap never shows it, and fills.
+constexpr float kCloseDelay = 0.3f;
+constexpr float kCloseHold = 1.2f;
 
 constexpr const char *kSectionNames[] = {"Discover",    "Apps",      "Games",  "Tools",
                                          "Coming soon", "Installed", "Updates"};
@@ -942,9 +945,14 @@ void Screen::refuse(ui::Feedback &feedback, bool repeat, float dx, float dy)
 
 void Screen::step_section(int delta, bool repeat, ui::Feedback &feedback)
 {
-    const int next = section_ + delta;
+    int next = section_ + delta;
     if (next < 0 || next >= kSections)
-        return refuse(feedback, repeat, static_cast<float>(delta), 0.0f);
+    {
+        // A press goes round to the other end; a held button stops at the edge.
+        if (repeat)
+            return refuse(feedback, repeat, static_cast<float>(delta), 0.0f);
+        next = (next + kSections) % kSections;
+    }
     section_ = next;
     focus_ = 0;
     developer_.clear();
@@ -1191,7 +1199,7 @@ void Screen::update_home(const InputFrame &input, ui::Feedback &feedback)
         else if (!developer_.empty())
             close_developer();
         else
-            return; // At the top Circle does nothing: the store is closed from the console.
+            return; // At the top a tap does nothing: holding Circle closes the store.
         feedback.play(audio::Cue::back);
     }
 }
@@ -1314,6 +1322,9 @@ void Screen::close_developer()
 void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
 {
     time_ += dt;
+    // Where this frame's input lands, before it changes anything: the home page, idle.
+    const bool at_home = !panel_ && !details_ && !dialog_.is_open() && !notes_open_ &&
+                         !intro_showing() && activity_.id.empty() && activity_.waiting.empty();
     // The intro stays at least a moment, and until the catalog has answered (six
     // seconds at most: the home page has its own loading state). Input waits for it.
     if (intro_on_ && intro_leave_ < 1.0f)
@@ -1472,6 +1483,21 @@ void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
     {
         details_ = false;
         update_home(input, feedback);
+    }
+    // Circle held on the home page closes the store. Not while something is being
+    // installed: that is cancelled or left to finish first.
+    {
+        const bool home = at_home && !panel_ && !details_ && !dialog_.is_open();
+        if (!home || !input.is_held(Action::back))
+            close_armed_ = false;
+        else if (input.is_pressed(Action::back))
+            close_armed_ = true;
+        close_hold_ = close_armed_ ? close_hold_ + dt : 0.0f;
+        if (close_hold_ >= kCloseDelay + kCloseHold && !quit_)
+        {
+            quit_ = true;
+            feedback.play(audio::Cue::back);
+        }
     }
     panel_value_.target = panel_ ? 1.0f : 0.0f;
     panel_value_.update(dt, 14.0f);
@@ -2965,6 +2991,8 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
     home[homes++] = {ui::Button::l1, "Sections", ui::Button::r1};
     if (!developer_.empty())
         home[homes++] = {ui::Button::circle, "All apps"};
+    else
+        home[homes++] = {ui::Button::circle, "Hold to close"};
     // The page's row names the one thing Cross does for this app, when it can.
     const Offer state = focused() ? offer(*focused()) : Offer{};
     ui::Hint detail[6];
@@ -3008,6 +3036,28 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
     }
     dialog_.draw(canvas);
     toasts_.draw(canvas);
+    if (close_hold_ > kCloseDelay)
+    {
+        // The bar that fills while Circle is held; full, the store closes.
+        const float filled = tween::clamp01((close_hold_ - kCloseDelay) / kCloseHold);
+        const float shown = tween::clamp01((close_hold_ - kCloseDelay) / 0.12f);
+        const char *words = "Keep holding to close ProsperoStore";
+        const float width = fonts.semibold.measure(words, 24) + 132.0f;
+        const Rect pill{(kWidth - width) * 0.5f, 842.0f, width, 76.0f};
+        overlay_.push_opacity(shown);
+        overlay_.shadow({pill.x, pill.y + 12.0f, pill.w, pill.h}, 38, 40, kBlack.with_alpha(0.5f));
+        overlay_.rounded_rect(pill, 38, gfx::mix(kCoal, kDeep, 0.5f).with_alpha(0.96f));
+        overlay_.bordered_rect(pill, 38, kClear, 1.5f, kInk.with_alpha(0.22f));
+        ui::draw_button(overlay_, fonts, glyphs, ui::Button::circle, pill.x + 30.0f, pill.y + 32.0f,
+                        30);
+        ui::text(overlay_, fonts.semibold, words, pill.x + 78.0f, centred(pill.y + 32.0f, 24), 24,
+                 kInk);
+        const Rect track{pill.x + 34.0f, pill.y + 58.0f, pill.w - 68.0f, 6.0f};
+        overlay_.rounded_rect(track, 3, kInk.with_alpha(0.16f));
+        overlay_.rounded_rect({track.x, track.y, std::max(6.0f, track.w * filled), track.h}, 3,
+                              kAccent);
+        overlay_.pop_opacity();
+    }
     if (intro_showing())
         draw_intro(fonts);
 
@@ -3284,9 +3334,8 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
     }
     if (input.is_pressed(Action::page_next) || input.is_pressed(Action::page_prev))
     {
-        const int next = panel_tab_ + (input.is_pressed(Action::page_next) ? 1 : -1);
-        if (next < 0 || next > 3)
-            return refuse(feedback, false, 0.0f, 0.0f);
+        // The rooms go round, like the sections.
+        const int next = (panel_tab_ + (input.is_pressed(Action::page_next) ? 1 : 3)) % 4;
         open_panel(next);
         feedback.play(audio::Cue::tab, 0.96f + 0.04f * static_cast<float>(next));
         return;

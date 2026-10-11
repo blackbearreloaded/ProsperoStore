@@ -169,6 +169,46 @@ static void check_search_and_sort()
     assert(screen.pending_search);
 }
 
+static void check_wrapping_and_closing()
+{
+    store::Screen screen;
+    store::App app;
+    app.title_id = "PPSA99001";
+    app.name = "One";
+    app.kind = "app";
+    screen.set_catalog({app}, "test");
+    hui::ui::Feedback quiet;
+    // L1 on the first section goes round to the last one (Updates: nothing listed), and R1 back.
+    hui::InputFrame previous, next;
+    previous.pressed = hui::action_bit(hui::Action::page_prev);
+    next.pressed = hui::action_bit(hui::Action::page_next);
+    screen.update(previous, 1.0f / 60.0f, quiet);
+    assert(screen.artwork().empty());
+    screen.update(next, 1.0f / 60.0f, quiet);
+    assert(screen.artwork() == std::vector<std::string>{app.title_id});
+    // Circle: a tap does not close, a hold does, and a hold that began on a page does not.
+    hui::InputFrame press, hold;
+    press.pressed = press.held = hui::action_bit(hui::Action::back);
+    hold.held = hui::action_bit(hui::Action::back);
+    screen.update(press, 1.0f / 60.0f, quiet);
+    screen.update({}, 1.0f / 60.0f, quiet);
+    assert(!screen.wants_quit());
+    assert(screen.open_app(app.title_id));
+    screen.pending_detail.clear();
+    screen.update(press, 1.0f / 60.0f, quiet); // leaves the page
+    for (int frame = 0; frame < 200; ++frame)
+        screen.update(hold, 1.0f / 60.0f, quiet);
+    assert(!screen.page_open() && !screen.wants_quit());
+    screen.update({}, 1.0f / 60.0f, quiet);
+    screen.update(press, 1.0f / 60.0f, quiet);
+    for (int frame = 0; frame < 60; ++frame)
+        screen.update(hold, 1.0f / 60.0f, quiet);
+    assert(!screen.wants_quit()); // a second in: not yet
+    for (int frame = 0; frame < 60; ++frame)
+        screen.update(hold, 1.0f / 60.0f, quiet);
+    assert(screen.wants_quit());
+}
+
 static void check_news_and_new_apps()
 {
     // The feed: items this version can read, twenty at most; not a feed at all is an error.
@@ -447,6 +487,7 @@ int main(int argc, char **argv)
     check_artwork_requests();
     check_search_and_sort();
     check_news_and_new_apps();
+    check_wrapping_and_closing();
     check_installed_sections();
     check_hold_to_uninstall();
     check_keyboard_keys();
@@ -687,6 +728,10 @@ int main(int argc, char **argv)
             }
             else if (mode == "search")
                 screen.set_query("radio");
+            else if (mode == "closing")
+            {
+                // Circle is held after the screen has settled: see below.
+            }
             else if (mode == "news")
             {
                 screen.set_news(
@@ -1019,6 +1064,16 @@ int main(int argc, char **argv)
             eglDestroyContext(display, context);
             eglTerminate(display);
             return 0;
+        }
+        if (argc == 5 && std::string(argv[4]) == "closing")
+        {
+            // Circle held for most of a second: the bar is part of the way.
+            hui::InputFrame press, hold;
+            press.pressed = press.held = hui::action_bit(hui::Action::back);
+            hold.held = hui::action_bit(hui::Action::back);
+            screen.update(press, 1.0f / 60.0f, feedback);
+            for (int frame = 0; frame < 54; ++frame)
+                screen.update(hold, 1.0f / 60.0f, feedback);
         }
         screen.draw(renderer, fonts.refs);
         if (argc == 5 && std::string(argv[4]) == "detail-end")
