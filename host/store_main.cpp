@@ -138,6 +138,55 @@ static void check_search_and_sort()
     assert(screen.pending_search);
 }
 
+static void check_news_and_new_apps()
+{
+    // The feed: items this version can read, twenty at most; not a feed at all is an error.
+    std::vector<store::catalog::News> news;
+    std::string error;
+    assert(store::catalog::parse_news(
+        R"({"schema":3,"news":[{"id":"2026-10-11-a","date":"2026-10-11T10:00:00Z","title":"Hello",)"
+        R"("body":"First.\n\nSecond."},{"id":"x","title":"no date"},7]})",
+        news, error));
+    assert(news.size() == 1 && news[0].id == "2026-10-11-a" && news[0].body == "First.\n\nSecond.");
+    assert(!store::catalog::parse_news(R"({"schema":3,"apps":[]})", news, error));
+    assert(!store::catalog::parse_news(R"({"schema":2,"news":[]})", news, error));
+    assert(store::catalog::parse_news(R"({"schema":3,"news":[]})", news, error) && news.empty());
+    // An item is announced until its room has been opened; that is remembered in the settings.
+    store::Screen screen;
+    screen.set_news({{"2026-10-11-a", "2026-10-11T10:00:00Z", "Hello", "First."}});
+    assert(screen.settings().news_seen.empty() && !screen.settings_changed);
+    screen.open_panel(3);
+    assert(screen.settings().news_seen == "2026-10-11-a" && screen.settings_changed);
+    const auto kept = store::parse_settings(store::format_settings(screen.settings()));
+    assert(kept.news_seen == "2026-10-11-a");
+    // Discover: apps the catalog listed in the last thirty days have their own shelf, ahead of
+    // the others it changed last. Without those dates there is the one shelf, as before.
+    store::App fresh, old, undated;
+    fresh.title_id = "PPSA99001";
+    fresh.name = "Fresh";
+    fresh.added = "2026-10-05T00:00:00Z";
+    fresh.updated = "2026-10-06T00:00:00Z";
+    old.title_id = "PPSA99002";
+    old.name = "Old";
+    old.added = "2026-07-01T00:00:00Z";
+    old.updated = "2026-10-10T00:00:00Z";
+    undated.title_id = "PPSA99003";
+    undated.name = "Undated";
+    undated.updated = "2026-09-01T00:00:00Z";
+    fresh.kind = old.kind = undated.kind = "app";
+    screen.set_catalog({old, undated, fresh}, "dated");
+    auto shown = screen.artwork();
+    assert(shown.size() >= 3 && shown[0] == fresh.title_id && shown[1] == old.title_id &&
+           shown[2] == undated.title_id);
+    fresh.added.clear();
+    old.added.clear();
+    store::Screen plain; // a new screen: the focus is on the first tile again
+    plain.set_catalog({old, undated, fresh}, "undated");
+    shown = plain.artwork();
+    assert(shown.size() >= 3 && shown[0] == old.title_id && shown[1] == fresh.title_id &&
+           shown[2] == undated.title_id);
+}
+
 static void check_installed_sections()
 {
     store::Screen screen;
@@ -265,7 +314,8 @@ static void check_hold_to_uninstall()
         screen.update({}, 1.0f / 60.0f, feedback);
     // A full hold orders the uninstall.
     screen.update(tap, 1.0f / 60.0f, feedback);
-    for (int frame = 0; frame < 90 && screen.pending_order.kind == store::Order::Kind::none; ++frame)
+    for (int frame = 0; frame < 90 && screen.pending_order.kind == store::Order::Kind::none;
+         ++frame)
         screen.update(hold, 1.0f / 60.0f, feedback);
     assert(screen.pending_order.kind == store::Order::Kind::uninstall);
 
@@ -345,7 +395,8 @@ static void check_catalog_settings()
     // Restore: the official catalog alone, checked.
     screen.update(down, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback);
-    assert(screen.settings().verify_signatures && screen.settings().catalog_url == catalog::kDefaultApi);
+    assert(screen.settings().verify_signatures &&
+           screen.settings().catalog_url == catalog::kDefaultApi);
     assert(screen.settings().use_official && !screen.settings().use_custom);
     // The two switches survive the settings file, and a file can't switch both off.
     Settings both;
@@ -364,6 +415,7 @@ int main(int argc, char **argv)
 {
     check_artwork_requests();
     check_search_and_sort();
+    check_news_and_new_apps();
     check_installed_sections();
     check_hold_to_uninstall();
     check_keyboard_keys();
@@ -399,7 +451,8 @@ int main(int argc, char **argv)
             return 5;
         store::Screen screen;
         // Settings previews do not need a live catalog or cached downloads.
-        if (argc == 4 && (std::string(argv[3]) == "settings" || std::string(argv[3]) == "catalog-settings"))
+        if (argc == 4 &&
+            (std::string(argv[3]) == "settings" || std::string(argv[3]) == "catalog-settings"))
         {
             screen.open_panel(1);
             hui::ui::Feedback quiet;
@@ -426,7 +479,8 @@ int main(int argc, char **argv)
                 screen.set_coming_soon_art(textures.back());
             }
         }
-        if (argc >= 4 && std::string(argv[3]) != "settings" && std::string(argv[3]) != "catalog-settings")
+        if (argc >= 4 && std::string(argv[3]) != "settings" &&
+            std::string(argv[3]) != "catalog-settings")
         {
             store::catalog::Client catalog(argv[3]);
             store::catalog::Snapshot snapshot;
@@ -444,6 +498,10 @@ int main(int argc, char **argv)
                                 0, entry.released, entry.updated});
                 apps.back().available_version = entry.content_version;
                 apps.back().size = entry.size;
+                apps.back().added = entry.added;
+                // A preview of the shelves with a catalog that doesn't date its apps yet.
+                if (argc == 5 && std::string(argv[4]) == "whats-new" && entry.added.empty())
+                    apps.back().added = entry.released;
             }
             screen.set_catalog(std::move(apps), "Verified catalog");
             store::catalog::Icons icons(std::string(argv[3]) + "/icons");
@@ -468,12 +526,13 @@ int main(int argc, char **argv)
                 const auto ambient = store::make_ambient(image, vivid);
                 if (!ambient.rgba.empty())
                 {
-                    const auto field = renderer.batch().create_texture(ambient.width, ambient.height,
-                                                                       ambient.rgba.data());
+                    const auto field = renderer.batch().create_texture(
+                        ambient.width, ambient.height, ambient.rgba.data());
                     textures.push_back(field);
                     screen.set_ambient(entry.id, field);
                 }
-                screen.set_accent(entry.id, hui::gfx::Color::rgb(vivid ? vivid : store::average_colour(image)));
+                screen.set_accent(
+                    entry.id, hui::gfx::Color::rgb(vivid ? vivid : store::average_colour(image)));
             }
             // The verified details the stage would ask for, from the cache.
             for (const auto &entry : snapshot.entries)
@@ -527,8 +586,8 @@ int main(int argc, char **argv)
                 screen.update(right, 1.0f / 60.0f, feedback);
                 settle(20);
             }
-            else if (mode == "page-light" || mode == "page-installing" || mode == "page-unpacking" ||
-                     mode == "page-installed" || mode == "page-eden")
+            else if (mode == "page-light" || mode == "page-installing" ||
+                     mode == "page-unpacking" || mode == "page-installed" || mode == "page-eden")
             {
                 screen.set_installer(true, true, "", "/data/homebrew");
                 screen.set_running({}, true);
@@ -548,12 +607,14 @@ int main(int argc, char **argv)
                 screen.pending_detail.clear();
                 hui::Image qr;
                 assert(hui::encode_qr("https://homebrew.page/app/" + id + "/", qr));
-                const auto texture = renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data());
+                const auto texture =
+                    renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data());
                 textures.push_back(texture);
                 screen.set_qr(id, texture, qr.width);
                 if (mode == "page-installing" || mode == "page-unpacking")
                 {
-                    const std::uint64_t total = mode == "page-installing" ? 197867360ull : 412000000ull;
+                    const std::uint64_t total =
+                        mode == "page-installing" ? 197867360ull : 412000000ull;
                     const int phase = mode == "page-installing" ? 1 : 3;
                     screen.set_activity({id, phase, total / 5, total, {"PPSA99420"}});
                     settle(60);
@@ -569,7 +630,8 @@ int main(int argc, char **argv)
                 screen.pending_detail.clear();
                 hui::Image qr;
                 assert(hui::encode_qr("https://homebrew.page/app/PPSA99169/", qr));
-                const auto texture = renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data());
+                const auto texture =
+                    renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data());
                 textures.push_back(texture);
                 screen.set_qr("PPSA99169", texture, qr.width);
             }
@@ -581,9 +643,11 @@ int main(int argc, char **argv)
             else if (mode == "busy-home")
             {
                 screen.set_installer(true, true, "", "/data/homebrew");
-                screen.set_activity({"PPSA99169", 1, 197867360ull / 5, 197867360ull, {"PPSA99420"}});
+                screen.set_activity(
+                    {"PPSA99169", 1, 197867360ull / 5, 197867360ull, {"PPSA99420"}});
                 settle(60);
-                screen.set_activity({"PPSA99169", 1, 197867360ull * 43 / 100, 197867360ull, {"PPSA99420"}});
+                screen.set_activity(
+                    {"PPSA99169", 1, 197867360ull * 43 / 100, 197867360ull, {"PPSA99420"}});
                 for (int i = 0; i < 1; ++i)
                 {
                     screen.update(right, 1.0f / 60.0f, feedback);
@@ -592,27 +656,48 @@ int main(int argc, char **argv)
             }
             else if (mode == "search")
                 screen.set_query("radio");
+            else if (mode == "news")
+            {
+                screen.set_news(
+                    {{"2026-10-11-store-060", "2026-10-11T09:00:00Z", "ProsperoStore 1.000.060",
+                      "Developer pages, a News room and a shelf for apps new to the catalog.\n\n"
+                      "Open an app and press R3 to see everything else its developer made."},
+                     {"2026-10-08-mirror", "2026-10-08T18:00:00Z", "The catalog has a mirror",
+                      "When homebrew.page can't be reached, the store now reads the same signed "
+                      "catalog from its mirror."}});
+                screen.open_panel(3);
+                settle(60);
+            }
+            else if (mode == "whats-new")
+            {
+                screen.update(down, 1.0f / 60.0f, feedback);
+                settle(40);
+            }
             else if (mode == "busy")
             {
                 // An install in progress, seen from the grid and the top bar.
                 screen.set_installer(true, true, "", "/data/homebrew");
                 screen.set_activity({"PPSA99007", 1, 30u << 20, 58u << 20, {"PPSA99420"}});
             }
-            else if (mode == "queue" || mode == "downloads" || mode == "settings" || mode == "about")
+            else if (mode == "queue" || mode == "downloads" || mode == "settings" ||
+                     mode == "about")
             {
                 screen.set_installer(true, true, "", "/data/homebrew");
                 screen.set_self("PPSA99000", "01.000.000");
-                screen.set_locations({{"/data/homebrew", 548ull << 30},
-                                      {"/mnt/ext1/homebrew", 912ull << 30}});
+                screen.set_locations(
+                    {{"/data/homebrew", 548ull << 30}, {"/mnt/ext1/homebrew", 912ull << 30}});
                 if (mode == "queue" || mode == "downloads")
                 {
-                    screen.set_activity({"PPSA99007", 3, 61u << 20, 94u << 20,
-                                         {"PPSA99420", "PPSA99169"}});
-                    screen.finish_job(true, false, "ProsperoRadio installed",
-                                      "ShadowMountPlus will add it to your home screen in a moment.");
+                    screen.set_activity(
+                        {"PPSA99007", 3, 61u << 20, 94u << 20, {"PPSA99420", "PPSA99169"}});
+                    screen.finish_job(
+                        true, false, "ProsperoRadio installed",
+                        "ShadowMountPlus will add it to your home screen in a moment.");
                     screen.finish_job(false, false, "PS5SX2: not changed", "Close the app first");
                 }
-                screen.open_panel(mode == "queue" || mode == "downloads" ? 0 : mode == "settings" ? 1 : 2);
+                screen.open_panel(mode == "queue" || mode == "downloads" ? 0
+                                  : mode == "settings"                   ? 1
+                                                                         : 2);
                 if (mode == "downloads")
                     settle(700);
                 // Settings: down to the location, right to the next one, saved once.
@@ -623,8 +708,9 @@ int main(int argc, char **argv)
                     screen.update(right, 1.0f / 60.0f, feedback);
                     assert(screen.settings().location == "/mnt/ext1/homebrew");
                     assert(screen.settings_changed);
-                    assert(store::parse_settings(store::format_settings(screen.settings())).location ==
-                           "/mnt/ext1/homebrew");
+                    assert(
+                        store::parse_settings(store::format_settings(screen.settings())).location ==
+                        "/mnt/ext1/homebrew");
                     screen.update(right, 1.0f / 60.0f, feedback);
                     assert(screen.settings().location == "/data/homebrew");
                     assert(!store::parse_settings("location=../x\nsounds=0\n").sounds);
@@ -787,10 +873,10 @@ int main(int argc, char **argv)
             int frames = 0;
             if (scene == "reel-browse")
             {
-                steps = {{20, "up"},     {150, "right"}, {230, "down"},  {300, "right"},
-                         {360, "right"}, {420, "right"}, {490, "down"},  {550, "right"},
+                steps = {{20, "up"},     {150, "right"},   {230, "down"}, {300, "right"},
+                         {360, "right"}, {420, "right"},   {490, "down"}, {550, "right"},
                          {610, "right"}, {680, "confirm"}, {860, "back"}, {960, "r1"},
-                         {1030, "r1"},  {1100, "right"}};
+                         {1030, "r1"},   {1100, "right"}};
                 frames = 1190;
             }
             else if (scene == "reel-install")
@@ -835,23 +921,28 @@ int main(int argc, char **argv)
                     const int start = 60;
                     const int f = frame - start;
                     if (f >= 0 && f < 240)
-                        screen.set_activity({id, 1, total * static_cast<std::uint64_t>(f) / 240, total, {}});
+                        screen.set_activity(
+                            {id, 1, total * static_cast<std::uint64_t>(f) / 240, total, {}});
                     else if (f >= 240 && f < 270)
                         screen.set_activity({id, 2, 0, 0, {}});
                     else if (f >= 270 && f < 420)
-                        screen.set_activity({id, 3, unpacked * static_cast<std::uint64_t>(f - 270) / 150,
-                                             unpacked, {}});
+                        screen.set_activity({id,
+                                             3,
+                                             unpacked * static_cast<std::uint64_t>(f - 270) / 150,
+                                             unpacked,
+                                             {}});
                     else if (f >= 420 && f < 444)
                         screen.set_activity({id, 4, 0, 0, {}});
                     else if (f == 444)
                     {
                         screen.set_activity({});
                         store::system::Inventory inventory;
-                        inventory.apps = {{id, "RetroArch", "01.000.000", "/data/homebrew/" + id, "",
-                                           false, true, false}};
+                        inventory.apps = {{id, "RetroArch", "01.000.000", "/data/homebrew/" + id,
+                                           "", false, true, false}};
                         screen.set_inventory(std::move(inventory));
-                        screen.finish_job(true, false, "RetroArch installed",
-                                          "ShadowMountPlus adds it to your home screen in a moment.");
+                        screen.finish_job(
+                            true, false, "RetroArch installed",
+                            "ShadowMountPlus adds it to your home screen in a moment.");
                     }
                 }
                 screen.update(input, 1.0f / 60.0f, feedback);

@@ -222,6 +222,8 @@ Screen::Screen() : theme_(farlight_theme())
     about_.style.focus_ring = false;
     about_.style.padding = 4;
     about_.set_bounds({636.0f, 350.0f, 1150.0f, 570.0f});
+    news_view_.style = about_.style;
+    news_view_.set_bounds({636.0f, 212.0f, 1150.0f, 708.0f});
     toasts_.style.theme = theme_;
     toasts_.style.frosted = true;
     toasts_.style.duration = 10.0f;
@@ -376,16 +378,20 @@ void Screen::rebuild()
     {
         const auto all = visible_;
         visible_.clear();
-        const auto shelf = [&](std::string title, auto keep, bool newest)
+        // order: 0 as listed, 1 the twelve updated last, 2 the twelve listed last.
+        const auto shelf = [&](std::string title, auto keep, int order)
         {
             std::vector<std::size_t> members;
             for (const auto index : all)
                 if (keep(apps_[index]))
                     members.push_back(index);
-            if (newest)
+            if (order)
             {
-                std::stable_sort(members.begin(), members.end(), [&](auto a, auto b)
-                                 { return apps_[a].updated > apps_[b].updated; });
+                std::stable_sort(members.begin(), members.end(),
+                                 [&](auto a, auto b) {
+                                     return order == 2 ? apps_[a].added > apps_[b].added
+                                                       : apps_[a].updated > apps_[b].updated;
+                                 });
                 if (members.size() > 12)
                     members.resize(12);
             }
@@ -405,13 +411,47 @@ void Screen::rebuild()
             shelves_.push_back(std::move(next));
         };
         const auto listed = [](const App &a) { return a.catalog_badge != "Coming soon"; };
-        shelf("Updates for you", [](const App &a) { return a.badge == "Update"; }, false);
-        shelf("New and updated", [&](const App &a) { return !a.local_only && listed(a); }, true);
-        shelf("Apps", [&](const App &a) { return a.kind == "app" && listed(a); }, false);
-        shelf("Games", [&](const App &a) { return a.kind == "game" && listed(a); }, false);
-        shelf("Tools", [&](const App &a) { return a.kind == "tool" && listed(a); }, false);
-        shelf("Coming soon", [](const App &a) { return a.catalog_badge == "Coming soon"; }, false);
-        shelf("On this console", [](const App &a) { return !a.installed.empty(); }, false);
+        // What's new: apps the catalog listed in the last thirty days, then the others it
+        // changed last. "Today" is the catalog's newest date, so the console's clock is not
+        // trusted; a catalog that doesn't say when it listed an app keeps the single shelf.
+        const auto day = [](const std::string &iso)
+        {
+            return iso.size() < 10 ? 0L
+                                   : std::atol(iso.substr(0, 4).c_str()) * 372L +
+                                         std::atol(iso.substr(5, 2).c_str()) * 31L +
+                                         std::atol(iso.substr(8, 2).c_str());
+        };
+        long today = 0;
+        for (const auto index : all)
+            today = std::max({today, day(apps_[index].added), day(apps_[index].updated)});
+        const auto fresh = [&](const App &a)
+        { return !a.local_only && listed(a) && !a.added.empty() && today - day(a.added) <= 30; };
+        const auto current = [&](const App &a) { return !a.local_only && listed(a); };
+        shelf("Updates for you", [](const App &a) { return a.badge == "Update"; }, 0);
+        if (std::any_of(all.begin(), all.end(), [&](auto index) { return fresh(apps_[index]); }))
+        {
+            shelf("New in the catalog", fresh, 2);
+            // The other shelf leaves out the apps that one shows.
+            std::vector<std::string> shown_new;
+            for (int k = 0; k < shelves_.back().count; ++k)
+                shown_new.push_back(
+                    apps_[visible_[static_cast<std::size_t>(shelves_.back().start + k)]].title_id);
+            shelf(
+                "Recently updated",
+                [&](const App &a)
+                {
+                    return current(a) && std::find(shown_new.begin(), shown_new.end(),
+                                                   a.title_id) == shown_new.end();
+                },
+                1);
+        }
+        else
+            shelf("New and updated", current, 1);
+        shelf("Apps", [&](const App &a) { return a.kind == "app" && listed(a); }, 0);
+        shelf("Games", [&](const App &a) { return a.kind == "game" && listed(a); }, 0);
+        shelf("Tools", [&](const App &a) { return a.kind == "tool" && listed(a); }, 0);
+        shelf("Coming soon", [](const App &a) { return a.catalog_badge == "Coming soon"; }, 0);
+        shelf("On this console", [](const App &a) { return !a.installed.empty(); }, 0);
     }
     // The stage features the newest releases.
     featured_.clear();
@@ -1382,6 +1422,8 @@ void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
     panel_value_.update(dt, 14.0f);
     about_.set_active(panel_ && panel_tab_ == 2);
     about_.update(dt);
+    news_view_.set_active(panel_ && panel_tab_ == 3);
+    news_view_.update(dt);
 
     // The featured app moves on by itself while the stage shows it.
     const bool home = !details_ && banner_shown();
@@ -2921,7 +2963,8 @@ std::string format_settings(const Settings &settings)
            "\ndebug=" + (settings.debug_log ? "1" : "0") + "\ncatalog_url=" + settings.catalog_url +
            "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") +
            "\nuse_official=" + (settings.use_official ? "1" : "0") +
-           "\nuse_custom=" + (settings.use_custom ? "1" : "0") + "\n";
+           "\nuse_custom=" + (settings.use_custom ? "1" : "0") +
+           "\nnews_seen=" + settings.news_seen + "\n";
 }
 
 Settings parse_settings(std::string_view text)
@@ -2956,6 +2999,8 @@ Settings parse_settings(std::string_view text)
             settings.use_official = value != "0";
         else if (key == "use_custom")
             settings.use_custom = value == "1";
+        else if (key == "news_seen" && value.size() <= 64)
+            settings.news_seen = value;
     }
     // A custom catalog with no address is not one: the official catalog alone.
     if (!settings.custom_active())
@@ -3034,10 +3079,52 @@ void Screen::open_panel(int tab)
     panel_ = true;
     development_options_ = false;
     setting_focus_ = 0;
-    panel_tab_ = std::clamp(tab, 0, 2);
+    panel_tab_ = std::clamp(tab, 0, 3);
     queue_focus_ = 0;
     if (panel_tab_ == 2)
         write_about();
+    if (panel_tab_ == 3 && !news_.empty() && settings_.news_seen != news_.front().id)
+    {
+        // Read: the notice for this item is not shown again.
+        settings_.news_seen = news_.front().id;
+        settings_changed = true;
+    }
+}
+
+void Screen::set_news(std::vector<catalog::News> news)
+{
+    news_ = std::move(news);
+    write_news();
+    if (!news_.empty() && settings_.news_seen != news_.front().id)
+        notify("News: " + news_.front().title, "Press Options and open News to read it.");
+}
+
+void Screen::write_news()
+{
+    using Block = ui::TextBlock;
+    std::vector<Block> blocks;
+    for (const auto &item : news_)
+    {
+        if (!blocks.empty())
+            blocks.push_back(Block::divider());
+        blocks.push_back(Block::heading(item.title, 2));
+        blocks.push_back(Block::heading(item.date.substr(0, item.date.find('T')), 3));
+        // A blank line starts a new paragraph.
+        std::size_t at = 0;
+        while (at < item.body.size())
+        {
+            auto end = item.body.find("\n\n", at);
+            if (end == std::string::npos)
+                end = item.body.size();
+            if (end > at)
+                blocks.push_back(Block::paragraph(item.body.substr(at, end - at)));
+            at = end + 2;
+        }
+    }
+    if (blocks.empty())
+        blocks.push_back(Block::paragraph("No news from the catalog yet."));
+    news_view_.set_content(std::move(blocks));
+    news_view_.scroll_to(0, true);
 }
 
 void Screen::write_about()
@@ -3120,7 +3207,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
     if (input.is_pressed(Action::page_next) || input.is_pressed(Action::page_prev))
     {
         const int next = panel_tab_ + (input.is_pressed(Action::page_next) ? 1 : -1);
-        if (next < 0 || next > 2)
+        if (next < 0 || next > 3)
             return refuse(feedback, false, 0.0f, 0.0f);
         open_panel(next);
         feedback.play(audio::Cue::tab, 0.96f + 0.04f * static_cast<float>(next));
@@ -3156,6 +3243,11 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
     if (panel_tab_ == 2)
     {
         about_.handle(input, feedback);
+        return;
+    }
+    if (panel_tab_ == 3)
+    {
+        news_view_.handle(input, feedback);
         return;
     }
     const int kRows = development_options_ ? 5 : 8;
@@ -3345,6 +3437,12 @@ void sign(gfx::DrawList &list, int which, float cx, float cy, Color ink)
         list.line(cx - 16.0f, cy, cx - 4.0f, cy, 2.5f, ink.with_alpha(ink.a * 0.6f));
         list.line(cx - 14.0f, cy + 6.0f, cx - 3.0f, cy + 6.0f, 2.5f, ink.with_alpha(ink.a * 0.35f));
         break;
+    case 30: // news: a page with lines
+        list.bordered_rect({cx - 11.0f, cy - 13.0f, 22.0f, 26.0f}, 4, kClear, 2.5f, ink);
+        list.line(cx - 5.0f, cy - 5.0f, cx + 5.0f, cy - 5.0f, 2.5f, ink);
+        list.line(cx - 5.0f, cy + 1.0f, cx + 5.0f, cy + 1.0f, 2.0f, ink.with_alpha(ink.a * 0.6f));
+        list.line(cx - 5.0f, cy + 6.0f, cx + 2.0f, cy + 6.0f, 2.0f, ink.with_alpha(ink.a * 0.6f));
+        break;
     default: // the store: its diamond
         list.rotated_rect({cx - 11.0f, cy - 11.0f, 22.0f, 22.0f}, 5.0f, 0.7854f, ink);
         list.rotated_rect({cx - 5.0f, cy - 5.0f, 10.0f, 10.0f}, 2.0f, 0.7854f, kDeep);
@@ -3376,12 +3474,12 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
     list.push_opacity(tween::smoothstep(t));
     list.push_transform(1.0f, 0, 0, 0, 24.0f * motion() * (1.0f - tween::cubic_out(t)));
 
-    // The left: whose room this is, the room's name, and the three rooms.
-    constexpr const char *kTabs[] = {"Downloads", "Settings", "About"};
+    // The left: whose room this is, the room's name, and the four rooms.
+    constexpr const char *kTabs[] = {"Downloads", "Settings", "About", "News"};
     ui::text(list, fonts.semibold, "PROSPEROSTORE", kMargin, 170.0f, 18, kAccent, gfx::Align::left,
              4.0f);
     ui::text(list, fonts.display, kTabs[panel_tab_], kMargin - 3.0f, 248.0f, 64, kInk);
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < 4; ++i)
     {
         const Rect entry{kMargin, 312.0f + 72.0f * static_cast<float>(i), 400.0f, 60.0f};
         const bool on = i == panel_tab_;
@@ -3390,9 +3488,13 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             list.rounded_rect(entry, 16, kInk.with_alpha(0.1f));
             list.rounded_rect({entry.x + 10.0f, entry.y + 16.0f, 4.0f, 28.0f}, 2, kAccent);
         }
-        sign(list, i, entry.x + 50.0f, entry.cy(), kInk.with_alpha(on ? 1.0f : 0.55f));
+        sign(list, i == 3 ? 30 : i, entry.x + 50.0f, entry.cy(),
+             kInk.with_alpha(on ? 1.0f : 0.55f));
         ui::text(list, fonts.semibold, kTabs[i], entry.x + 86.0f, centred(entry.cy(), 24), 24,
                  kInk.with_alpha(on ? 1.0f : 0.6f));
+        if (i == 3 && !news_.empty() && settings_.news_seen != news_.front().id)
+            pill(list, fonts, "New", entry.x + entry.w - 76.0f, entry.cy(), 30.0f, kAccent,
+                 kOnAccent, 1.0f, kAllLayers);
         if (i == 0 && (!activity_.id.empty() || !activity_.waiting.empty()))
         {
             const int jobs =
@@ -3401,11 +3503,11 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
                  kAccent, kOnAccent, 1.0f, kAllLayers);
         }
     }
-    ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::l1, kMargin, 560.0f, 26);
+    ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::l1, kMargin, 628.0f, 26);
     ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::r1,
-                    kMargin + ui::button_width(ui::Button::l1, 26) + 8.0f, 560.0f, 26);
+                    kMargin + ui::button_width(ui::Button::l1, 26) + 8.0f, 628.0f, 26);
     ui::text(list, fonts.regular, "Switch rooms",
-             kMargin + 2.0f * ui::button_width(ui::Button::l1, 26) + 24.0f, centred(560.0f, 20), 20,
+             kMargin + 2.0f * ui::button_width(ui::Button::l1, 26) + 24.0f, centred(628.0f, 20), 20,
              kInk.with_alpha(0.5f));
 
     // The right: one glass panel with the room's content.
@@ -3656,6 +3758,14 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
         ui::text(list, fonts.regular,
                  std::to_string(setting_focus_ + 1) + " / " + std::to_string(count), kMargin,
                  716.0f, 20, kInk.with_alpha(0.5f));
+    }
+    else if (panel_tab_ == 3)
+    {
+        // News: what the catalog's maintainers wrote, newest first.
+        ui::text(list, fonts.semibold, "FROM THE CATALOG", px, panel.y + 52.0f, 16,
+                 kInk.with_alpha(0.55f), gfx::Align::left, 3.0f);
+        ui::Canvas canvas{list, fonts, glass, time_};
+        news_view_.draw(canvas);
     }
     else
     {

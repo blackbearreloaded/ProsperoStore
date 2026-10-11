@@ -16,6 +16,7 @@ namespace store::catalog
 constexpr std::size_t kIndexLimit = 4 * 1024 * 1024;
 constexpr std::size_t kDetailLimit = 64 * 1024;
 constexpr std::size_t kVersionsLimit = 1024 * 1024;
+constexpr std::size_t kNewsLimit = 64 * 1024;
 constexpr std::uint64_t kArtifactLimit = 2ULL * 1024 * 1024 * 1024;
 
 bool title_id(std::string_view value);
@@ -43,6 +44,7 @@ struct Entry
     std::string id, name, author, kind, status;
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
+    std::string added; // when the catalog first listed the app; empty from an older catalog
     std::uint64_t size = 0;
     // Not from the catalog's files: set by the store on entries that come from the custom
     // catalog shown beside the official one.
@@ -87,8 +89,20 @@ bool verify_manifest(std::string_view body, std::string_view signature, std::uin
                      std::span<const PublicKey> keys, Manifest &out, std::string &error);
 bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out,
                     std::string &error);
+// A file the catalog signs by itself (news.json with news.sig): the released stores refuse a
+// manifest that names a file they don't know, so a new file can't be listed there.
+bool verify_signed(std::string_view body, std::string_view signature,
+                   std::span<const PublicKey> keys);
 bool parse_index(std::string_view body, std::vector<Entry> &out, std::string &error);
 bool parse_detail(std::string_view body, std::string_view expected, Entry &out, std::string &error);
 bool parse_versions(std::string_view body, std::map<std::string, std::string> &out,
                     std::string &error);
+// A short message from the catalog's maintainers ("news.json", newest first).
+struct News
+{
+    std::string id, date, title, body;
+};
+// At most twenty items are kept. An item this version can't read is left out; a file that
+// is not the feed at all is an error.
+bool parse_news(std::string_view body, std::vector<News> &out, std::string &error);
 } // namespace store::catalog

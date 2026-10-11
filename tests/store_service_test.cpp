@@ -92,6 +92,11 @@ bool Client::detail(const Snapshot &, const std::string &id, Entry &entry, net::
     entry.page = "https://homebrew.page/app/PPSA99000/";
     return true;
 }
+bool Client::news(const Snapshot &, std::vector<News> &out, net::Control &, std::string &)
+{
+    out = {{"2026-10-11-a", "2026-10-11T10:00:00Z", "Hello", "First."}};
+    return true;
+}
 } // namespace store::catalog
 namespace store::net
 {
@@ -249,6 +254,9 @@ int main()
     // A newer store in the catalog becomes one offer; nothing is downloaded for it.
     const auto notice = next(service, store::Update::Kind::store_update);
     assert(notice.message == "1.0.10");
+    // The catalog's news follows the catalog it came with.
+    const auto feed = next(service, store::Update::Kind::news);
+    assert(feed.news.size() == 1 && feed.news.front().title == "Hello");
     std::vector<std::string> ids;
     for (const auto &entry : fixture().entries)
         ids.push_back(entry.id);

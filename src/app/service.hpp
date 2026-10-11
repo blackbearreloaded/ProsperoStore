@@ -26,12 +26,14 @@ struct Update
         notice,       // message is its title, detail its body
         store_update, // a newer ProsperoStore is listed: message is its version
         setup,        // what to check in ShadowMountPlus's settings: detail, one per line
+        news,         // the catalog's news feed, newest first
         job,          // a finished install, update or uninstall: entry.id, ok, message, detail
         locations,    // where apps can be installed on this console
         error
     } kind = Kind::error;
     std::string detail;
     catalog::Snapshot snapshot;
+    std::vector<catalog::News> news;
     catalog::Entry entry;
     hui::Image image;
     hui::Image ambient;       // icon: the app's picture, made from it (make_ambient)

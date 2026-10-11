@@ -118,7 +118,7 @@ bool read_entry(yyjson_val *value, Entry &entry, bool detail)
         !field(value, "icon_hash", entry.icon_hash, 64) ||
         !field(value, "icon", entry.large_icon, 512) ||
         !field(value, "released", entry.released, 40) ||
-        !field(value, "updated", entry.updated, 40))
+        !field(value, "updated", entry.updated, 40) || !field(value, "added", entry.added, 40))
         return false;
     if (entry.status != "available" && entry.status != "coming_soon")
         return false;
@@ -317,6 +317,19 @@ bool verify_manifest(std::string_view body, std::string_view signature, std::uin
     return parse_manifest(body, highest, out, error);
 }
 
+bool verify_signed(std::string_view body, std::string_view signature,
+                   std::span<const PublicKey> keys)
+{
+    if (body.empty() || signature.size() != 64)
+        return false;
+    bool signed_by_us = false;
+    for (const auto &key : keys)
+        signed_by_us |= crypto_ed25519_check(
+                            reinterpret_cast<const std::uint8_t *>(signature.data()), key.data(),
+                            reinterpret_cast<const std::uint8_t *>(body.data()), body.size()) == 0;
+    return signed_by_us;
+}
+
 bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out, std::string &error)
 {
     error = "The catalog manifest is invalid";
@@ -340,10 +353,11 @@ bool parse_manifest(std::string_view body, std::uint64_t highest, Manifest &out,
     yyjson_obj_foreach(files, index, count, key, value)
     {
         const std::string path(yyjson_get_str(key), yyjson_get_len(key));
+        // A file this version doesn't know is passed over, so the catalog can add one later.
         if (path != "index.json" && path != "versions.json" &&
             !(path.size() == 19 && path.starts_with("apps/") && path.ends_with(".json") &&
               title_id(std::string_view(path).substr(5, 9))))
-            return false;
+            continue;
         if (!yyjson_is_str(value))
             return false;
         const std::string digest(yyjson_get_str(value), yyjson_get_len(value));
@@ -560,6 +574,31 @@ bool parse_versions(std::string_view body, std::map<std::string, std::string> &o
         versions.emplace(id, content);
     }
     out = std::move(versions);
+    error.clear();
+    return true;
+}
+
+bool parse_news(std::string_view body, std::vector<News> &out, std::string &error)
+{
+    error = "The news response is invalid";
+    Json json;
+    auto *root = json.read(body, kNewsLimit);
+    auto *items = yyjson_obj_get(root, "news");
+    if (!root || !yyjson_is_arr(items))
+        return false;
+    std::vector<News> news;
+    std::size_t index = 0, count = 0;
+    yyjson_val *item = nullptr;
+    yyjson_arr_foreach(items, index, count, item)
+    {
+        News one;
+        if (news.size() >= 20 || !yyjson_is_obj(item) || !field(item, "id", one.id, 64, true) ||
+            !field(item, "date", one.date, 40, true) ||
+            !field(item, "title", one.title, 120, true) || !field(item, "body", one.body, 2000))
+            continue;
+        news.push_back(std::move(one));
+    }
+    out = std::move(news);
     error.clear();
     return true;
 }

@@ -63,6 +63,10 @@ class Client
     bool refresh(Snapshot &out, net::Control &control, std::string &error);
     bool detail(const Snapshot &snapshot, const std::string &id, Entry &out, net::Control &control,
                 std::string &error);
+    // The catalog's news: news.json, signed by itself (news.sig) with the catalog's keys.
+    // Read online only. False with an empty error when the catalog publishes none.
+    bool news(const Snapshot &snapshot, std::vector<News> &out, net::Control &control,
+              std::string &error);
 
   private:
     bool file(const Manifest &manifest, const std::string &name, std::size_t limit,

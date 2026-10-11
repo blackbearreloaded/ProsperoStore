@@ -45,6 +45,7 @@ struct App
     bool ambient = false; // the background was made from the icon (make_ambient)
     hui::gfx::Color accent = hui::gfx::Color::rgb(0x42358f);
     std::uint64_t size = 0;
+    std::string added = {}; // when the catalog first listed it
 };
 
 // What the page asks the installer to do. The frame loop hands it to the
@@ -84,6 +85,7 @@ struct Settings
         return use_custom && catalog_url != catalog::kDefaultApi;
     }
     bool verify_signatures = true;
+    std::string news_seen; // the newest news item that was read
 };
 std::string format_settings(const Settings &settings);
 Settings parse_settings(std::string_view text);
@@ -161,6 +163,8 @@ class Screen
         debug_file_ = std::move(file);
         write_about();
     }
+    // The catalog's news, newest first: its own room, and a notice for an item not read yet.
+    void set_news(std::vector<catalog::News> news);
     // What to check in ShadowMountPlus's settings: a notice now, the whole list in About.
     void set_setup_notes(std::vector<std::string> notes);
     void set_self(std::string id, std::string version)
@@ -168,7 +172,7 @@ class Screen
         self_id_ = std::move(id);
         self_version_ = std::move(version);
     }
-    // Queue (0), Settings (1) or About (2), over whatever is on screen.
+    // Queue (0), Settings (1), About (2) or News (3), over whatever is on screen.
     void open_panel(int tab);
     // The titles running now; known is false when that can't be told, and
     // then nothing installed is changed.
@@ -352,7 +356,9 @@ class Screen
     bool development_options_ = false;
     int panel_tab_ = 1, queue_focus_ = 0, setting_focus_ = 0;
     hui::tween::Spring panel_value_;
-    hui::ui::TextView about_;
+    hui::ui::TextView about_, news_view_;
+    std::vector<catalog::News> news_;
+    void write_news();
     std::vector<std::string> running_;
     std::string auto_order_;
     // "Update all": the titles still to be asked for, one at a time, each

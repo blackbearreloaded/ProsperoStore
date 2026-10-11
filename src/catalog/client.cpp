@@ -248,6 +248,32 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &error)
     return true;
 }
 
+bool Client::news(const Snapshot &snapshot, std::vector<News> &out, net::Control &control,
+                  std::string &error)
+{
+    error.clear();
+    if (!snapshot.accepted || !snapshot.online)
+        return false;
+    // From the place that answered for the catalog. A catalog without news answers 404.
+    const std::string &origin = origins_[origin_ % origins_.size()];
+    std::string body, signature;
+    auto response =
+        net::fetch(origin + "news.json", net::Purpose::catalog, kNewsLimit, body, control);
+    if (!response.ok())
+        return false;
+    if (verify_)
+    {
+        response = net::fetch(origin + "news.sig", net::Purpose::catalog, 64, signature, control);
+        const auto keys = public_keys();
+        if (!response.ok() || !verify_signed(body, signature, keys))
+        {
+            error = "The catalog's news could not be verified";
+            return false;
+        }
+    }
+    return parse_news(body, out, error);
+}
+
 bool Client::detail(const Snapshot &snapshot, const std::string &id, Entry &out,
                     net::Control &control, std::string &error)
 {

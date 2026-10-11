@@ -759,6 +759,17 @@ void Service::run()
     }
     if (refreshed && check_updates && !control_.cancelled.load())
         check_store_update();
+    if (refreshed && snapshot.accepted && !control_.cancelled.load())
+    {
+        // The catalog's news; a catalog without any says nothing.
+        Update feed;
+        feed.kind = Update::Kind::news;
+        std::string failure;
+        if (client.news(snapshot, feed.news, control_, failure) && !feed.news.empty())
+            publish(std::move(feed));
+        else if (!failure.empty())
+            hui::sys::log("[STORE] news: %s", failure.c_str());
+    }
     if (!control_.cancelled.load())
     {
         Update installed;

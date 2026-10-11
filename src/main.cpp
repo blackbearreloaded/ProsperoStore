@@ -432,6 +432,7 @@ int main()
                                     entry.released, entry.updated});
                     apps.back().available_version = entry.content_version;
                     apps.back().size = entry.size;
+                    apps.back().added = entry.added;
                 }
 #ifdef STORE_DEBUG_TRACE
                 store::diag::trace("catalog: %zu apps, %s, %s", apps.size(),
@@ -458,6 +459,8 @@ int main()
                 screen.notify(std::move(update.message), std::move(update.detail));
             else if (update.kind == store::Update::Kind::store_update)
                 screen.offer_store_update(std::move(update.message));
+            else if (update.kind == store::Update::Kind::news)
+                screen.set_news(std::move(update.news));
             else if (update.kind == store::Update::Kind::setup)
             {
                 std::vector<std::string> notes;
