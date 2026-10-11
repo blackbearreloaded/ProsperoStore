@@ -62,6 +62,8 @@ void trace_request(const std::string &url, const Response &out, const char *tran
                        url.c_str(), out.status, static_cast<unsigned long long>(out.bytes),
                        worked ? "" : ", failed at ", worked ? "" : step,
                        out.error.empty() ? "" : ": ", out.error.c_str(), code);
+    if (!out.detail.empty())
+        store::diag::trace("request detail: %.400s", out.detail.c_str());
 }
 #endif
 } // namespace

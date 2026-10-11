@@ -37,6 +37,8 @@ struct Response
     int status = 0;
     std::uint64_t bytes = 0;
     std::string location, etag, error;
+    // For the debug log, when a request failed: how far it got and how long each step took.
+    std::string detail;
     bool ok() const
     {
         return error.empty() && (status == 200 || status == 304);

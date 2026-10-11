@@ -137,9 +137,10 @@ about permissions under [Install](#install).
 ## Reporting a problem
 
 If the store shows no apps, stays offline or can't install something, switch on **Debug log** in
-**Settings** (Options button), close the store and open it again, and repeat what failed. The
-store then records each step it takes: the access it was given, the network requests, the
-catalog and every install.
+**Settings** (Options button) and repeat what failed. The log starts with what the store found
+when it opened (the access it was given, the catalog), then records each step it takes: the
+network requests and every install. The switch stays on the next time the store opens, wherever
+the store can keep its settings.
 
 Send one of these with your report:
 

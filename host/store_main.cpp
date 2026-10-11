@@ -132,6 +132,37 @@ static void check_search_and_sort()
     detail.id = b.title_id;
     detail.description = "Verified description";
     screen.set_detail(detail);
+    // A developer's page: that developer's apps alone, with the link their details give.
+    screen.set_catalog({a, b, c}, "again");
+    detail = {};
+    detail.id = a.title_id;
+    detail.source = "https://github.com/bear-studio/zulu";
+    screen.set_detail(detail);
+    assert(screen.open_developer("Bear Studio") && screen.developer() == "Bear Studio");
+    assert(screen.artwork() == std::vector<std::string>{a.title_id});
+    assert(screen.pending_developer_link == "https://github.com/bear-studio");
+    assert(!screen.open_developer(""));
+    hui::InputFrame leave;
+    leave.pressed = hui::action_bit(hui::Action::back);
+    screen.update(leave, 1.0f / 60.0f, feedback);
+    assert(screen.developer().empty() && screen.artwork().size() == 3);
+    {
+        bool support = false;
+        store::catalog::Entry who;
+        assert(store::catalog::developer_link(who, support).empty() && !support);
+        who.source = "https://example.com/someone/app";
+        assert(store::catalog::developer_link(who, support).empty());
+        who.source = "https://codeberg.org/someone/app";
+        assert(store::catalog::developer_link(who, support) == "https://codeberg.org/someone");
+        who.author_url = "https://someone.example/";
+        assert(store::catalog::developer_link(who, support) == "https://someone.example/" &&
+               !support);
+        who.donate_url = "https://ko-fi.com/someone";
+        assert(store::catalog::developer_link(who, support) == "https://ko-fi.com/someone" &&
+               support);
+        who.donate_url = "http://ko-fi.com/someone"; // not HTTPS: passed over
+        assert(store::catalog::developer_link(who, support) == "https://someone.example/");
+    }
     screen.set_catalog({}, "removed");
     assert(screen.artwork().empty());
     screen.update(search, 1.0f / 60.0f, feedback);
@@ -671,6 +702,22 @@ int main(int argc, char **argv)
             else if (mode == "whats-new")
             {
                 screen.update(down, 1.0f / 60.0f, feedback);
+                settle(40);
+            }
+            else if (mode == "developer")
+            {
+                // The page of the developer of the first app whose details are here.
+                screen.open_developer("BlackBearReloaded");
+                const std::string link = screen.pending_developer_link.empty()
+                                             ? "https://github.com/blackbearreloaded"
+                                             : screen.pending_developer_link;
+                hui::Image qr;
+                assert(hui::encode_qr(link, qr));
+                const auto texture =
+                    renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data());
+                textures.push_back(texture);
+                screen.pending_developer_link = link;
+                screen.set_developer_qr(link, texture);
                 settle(40);
             }
             else if (mode == "busy")

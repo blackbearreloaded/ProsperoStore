@@ -120,6 +120,20 @@ class Screen
     // loop loads them all once and keeps them, so moving never waits.
     std::vector<std::string> artwork_backlog() const;
     void set_qr(std::string id, std::uint32_t texture, int width);
+    // A developer's page: every app by one developer, opened from an app's page (R3) and
+    // left with Circle. The link is the developer's (catalog::developer_link); the frame
+    // loop turns the pending one into a code.
+    bool open_developer(const std::string &author);
+    const std::string &developer() const
+    {
+        return developer_;
+    }
+    std::string pending_developer_link;
+    void set_developer_qr(std::string link, std::uint32_t texture)
+    {
+        developer_qr_link_ = std::move(link);
+        developer_qr_ = texture;
+    }
     // The picture shown for a coming-soon app that has no artwork of its own.
     void set_coming_soon_art(std::uint32_t texture)
     {
@@ -411,6 +425,10 @@ class Screen
     system::Inventory inventory_;
     bool inventory_ready_ = false, catalog_current_ = false;
     std::string query_;
+    std::string developer_, developer_link_, developer_qr_link_;
+    bool developer_support_ = false; // the link is a place to support them
+    std::uint32_t developer_qr_ = 0;
+    void close_developer();
     std::string qr_id_;
     std::uint32_t qr_texture_ = 0, coming_soon_art_ = 0;
     int qr_width_ = 0;

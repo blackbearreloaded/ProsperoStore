@@ -36,6 +36,10 @@ inline constexpr const char *kDefaultApi = "https://homebrew.page/api/v1/";
 // Empty input restores the official API; otherwise require an HTTPS directory URL.
 bool normalize_api(std::string_view value, std::string &out);
 bool artifact_url(std::string_view url, bool redirected = false);
+// Where a developer can be found, for the code on their page: the catalog's donation address
+// (support is set), else their own page, else the owner of the source repository on a known
+// host. Empty when none of them is an HTTPS address.
+std::string developer_link(const struct Entry &entry, bool &support);
 std::string sha256(std::string_view bytes);
 bool hex_bytes(std::string_view text, std::span<std::uint8_t> bytes);
 
@@ -45,6 +49,8 @@ struct Entry
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
     std::string added; // when the catalog first listed the app; empty from an older catalog
+    // Optional: the developer's own page and a place to support them (HTTPS addresses).
+    std::string author_url, donate_url;
     std::uint64_t size = 0;
     // Not from the catalog's files: set by the store on entries that come from the custom
     // catalog shown beside the official one.
