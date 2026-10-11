@@ -147,7 +147,7 @@
       "tooling/native/self_container.hpp": "c06a754fb6897b816154a598cdc7413dcbb2260baed54e00d8e854bbed9b7100",
       "tooling/prospero-clang18": "15dd5f73472f5a1cfed9e974f550bddf1cec5f2136ec5ffe062a764b1c45b48a",
       "tools/build-host-tools.sh": "c3ea9578eb9e86655ecf81d4b4c2847a2a58630aa6c935289156271295cd3912",
-      "tools/build-lapy-helper.py": "9cb287e2b1d6c89778f1ba109e6a1a6c0905806ec46e24244de91f3aa65aad50",
+      "tools/build-lapy-helper.py": "6633b6bb134592b1bb001bc39049c69d8c8572d0ee9f0b221826c463fbb3f60a",
       "tools/build-tests.sh": "f00a3a1b0a0bd3a38264c051a0c70485c6c7c58d8e61e9d6582d72252fa5c7f8",
       "tools/check-headers.ps1": "b75d2c4855a6ed59beb520a7bedf0838bb81a34cf1a10828a1071dfacbb0795a",
       "tools/deploy.sh": "a8a30b440e208d424a8fe778f65868509d2112b1ab7d8aa4e5bdbc1ad1d19022",
@@ -173,7 +173,7 @@
     "local_changes": {
       "examples/sandbox-elevation/elevation.hpp": "Diagnostics only: elevation::step() and step_code() report the last step request() reached. Store-only until the boilerplate kit takes it.",
       "examples/sandbox-elevation/src/elevation.cpp": "Diagnostics only: elevation::step() and step_code() report the last step request() reached. Store-only until the boilerplate kit takes it.",
-      "tools/build-lapy-helper.py": "Lapy helper from blackbearreloaded/PS5-Lapy-JB-Daemon c3bdfe3 (our donor-release fix, upstream PR 48, plus upstream PR 49 for the 32-byte credential attributes) built with payload SDK v0.42, which knows firmware 13.40 to 13.60. Store-only until upstream merges both.",
+      "tools/build-lapy-helper.py": "Lapy helper from blackbearreloaded/PS5-Lapy-JB-Daemon 57fcc19 (our donor-release fix, upstream PR 48, upstream PR 49 for the 32-byte credential attributes, and the guarded target lifetime of upstream PR 50) built with payload SDK v0.42, which knows firmware 13.40 to 13.60. Store-only until upstream merges them.",
       ".github/workflows/tooling.yml": "The store's own workflow: lint, its tests, the release ZIP only (entries 0777), a pre-release for a v-tag. A pull request's build is named by its number and its own commit (docs/PULL_REQUEST_BUILDS.md). Pushes to main build nothing; a build on main is started by hand. The finished ZIP gets a signed build-provenance attestation (actions/attest, pinned) before the upload, except for a pull request or in a private repository; the build job alone holds id-token: write and attestations: write for it. For a v-tag the release job creates the pre-release, or adds the ZIP and SHA256SUMS to a release that has no ZIP yet; a release that already has a ZIP is left untouched and the run warns. The compiler cache is restored from GitHub's cache or, failing that, from the snapshot file of the build-cache release; a manual run with \"snapshot\" ticked keeps its cache as an artifact, which build-cache.yml publishes.",
       "docs/CONFIGURATION.md": "The store's release is the ZIP only, published by a v-tag (v1.002.003 for contentVersion 01.002.003), not the bare version. No image formats any more: the DEPLOY_FORMAT row is removed.",
       "docs/DEPLOYMENT.md": "The store's release has no .ffpfsc image. No image formats any more: the ffpfsc and ffpkg deploy routes, targets and outputs are gone from the text; the folder is the only thing deployed.",
