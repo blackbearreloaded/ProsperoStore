@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "net/curl_request.hpp"
+#include <cstdio>
 #include <memory>
 #include <limits>
 #ifdef STORE_NATIVE_CURL
@@ -123,9 +124,13 @@ Response curl_request(const std::string &url, std::uint64_t limit, const Sink &s
     set(CURLOPT_SSL_VERIFYHOST, 2L);
     set(CURLOPT_USERAGENT, "ProsperoStore/01.000.050");
     set(CURLOPT_ACCEPT_ENCODING, "identity");
-    set(CURLOPT_CONNECTTIMEOUT, 10L);
+    set(CURLOPT_CONNECTTIMEOUT, 15L);
+    // A server may take a while to send its first byte, and a slow line stalls for seconds:
+    // only twenty seconds of nothing at all ends a request.
     set(CURLOPT_LOW_SPEED_LIMIT, 1L);
-    set(CURLOPT_LOW_SPEED_TIME, 5L);
+    set(CURLOPT_LOW_SPEED_TIME, 20L);
+    char message[CURL_ERROR_SIZE] = {};
+    set(CURLOPT_ERRORBUFFER, message);
     set(CURLOPT_HTTPHEADER, list);
     set(CURLOPT_WRITEFUNCTION, write);
     set(CURLOPT_WRITEDATA, &state);
@@ -148,6 +153,26 @@ Response curl_request(const std::string &url, std::uint64_t limit, const Sink &s
     else if ((result != CURLE_OK || info != CURLE_OK) && out.error.empty())
         out.error =
             "The network request failed (curl " + std::to_string(static_cast<int>(result)) + ")";
+    if (result != CURLE_OK)
+    {
+        // What curl says happened, the address it reached and when each step ended (0: never).
+        const auto seconds = [&](CURLINFO what)
+        {
+            double value = 0.0;
+            (void)curl_easy_getinfo(curl, what, &value);
+            return static_cast<int>(value * 1000.0);
+        };
+        char *address = nullptr;
+        (void)curl_easy_getinfo(curl, CURLINFO_PRIMARY_IP, &address);
+        char text[CURL_ERROR_SIZE + 160];
+        std::snprintf(text, sizeof(text),
+                      "%s; address %s; ms: name %d, connect %d, tls %d, first byte %d, total %d",
+                      message[0] ? message : curl_easy_strerror(result),
+                      address && address[0] ? address : "none", seconds(CURLINFO_NAMELOOKUP_TIME),
+                      seconds(CURLINFO_CONNECT_TIME), seconds(CURLINFO_APPCONNECT_TIME),
+                      seconds(CURLINFO_STARTTRANSFER_TIME), seconds(CURLINFO_TOTAL_TIME));
+        out.detail = text;
+    }
     else if (!read_headers(state.headers, out))
         out.error = "The response headers are invalid";
     return out;
