@@ -764,6 +764,32 @@ void Service::run()
             publish(std::move(notice));
         }
     }
+    // Likes and comment counts, read with the catalog and only while the setting is on. They
+    // are decoration from an address of their own: any failure shows nothing, and is tried
+    // again when a page next asks for comments. Without a network they are not asked for.
+    bool likes_wanted = true, likes_known = false;
+    const auto read_likes = [&]
+    {
+        if (likes_stale_.exchange(false))
+        {
+            likes_wanted = true;
+            likes_known = false;
+        }
+        if (!comments_.load() || !refreshed || !likes_wanted || likes_known ||
+            control_.cancelled.load())
+            return;
+        likes_wanted = false;
+        Update counts;
+        counts.kind = Update::Kind::likes;
+        std::string body;
+        const auto response = net::fetch(social::index_url(), net::Purpose::comments,
+                                         social::kIndexLimit, body, control_);
+        likes_known = response.ok() && social::parse_index(body, counts.likes);
+        hui::sys::log("[STORE] likes known=%d apps=%zu", likes_known, counts.likes.size());
+        if (likes_known)
+            publish(std::move(counts));
+    };
+    read_likes();
     if (refreshed && check_updates && !control_.cancelled.load())
         check_store_update();
     if (refreshed && snapshot.accepted && !control_.cancelled.load())
@@ -809,6 +835,7 @@ void Service::run()
         }
         if (!frame_report.empty())
             hui::sys::log("[STORE] %s", frame_report.c_str());
+        read_likes();
         std::string settings;
         bool save = false;
         {
@@ -875,6 +902,20 @@ void Service::run()
                 qr.entry.id = id;
                 if (catalog::api_url(page) && hui::encode_qr(page, qr.image))
                     publish(std::move(qr));
+            }
+            if (verified_detail && comments_.load() && refreshed && !from_extra &&
+                !control_.cancelled.load())
+            {
+                // The app's latest comments, after everything the catalog itself says about it.
+                likes_wanted = true;
+                Update latest;
+                latest.kind = Update::Kind::comments;
+                latest.entry.id = id;
+                std::string body;
+                const auto response = net::fetch(social::thread_url(id), net::Purpose::comments,
+                                                 social::kThreadLimit, body, control_);
+                if (response.ok() && social::parse_thread(body, id, latest.thread))
+                    publish(std::move(latest));
             }
         }
         hui::sys::sleep_us(100000);

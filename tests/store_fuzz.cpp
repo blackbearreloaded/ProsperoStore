@@ -4,6 +4,7 @@
 #include "catalog/catalog.hpp"
 #include "install/archive.hpp"
 #include "install/files.hpp"
+#include "social/comments.hpp"
 #include <atomic>
 #include <cstdint>
 #include <fcntl.h>
@@ -70,6 +71,49 @@ void records(std::string_view body)
             again.location != journal.location || again.state != journal.state)
             __builtin_trap();
     }
+    // Likes and comments: whatever is kept is bounded, plain, and carries no other address.
+    const auto bounded = [](const std::string &text, std::size_t limit)
+    {
+        std::size_t characters = 0;
+        for (const char c : text)
+        {
+            const auto byte = static_cast<unsigned char>(c);
+            if (byte < 32 || byte == 127)
+                __builtin_trap();
+            characters += (byte & 0xc0) != 0x80;
+        }
+        if (characters > limit || store::social::plain(text, limit) != text)
+            __builtin_trap();
+    };
+    const auto sane = [](const store::social::Counts &counts)
+    {
+        if (counts.likes > store::social::kMost || counts.comments > store::social::kMost ||
+            (!counts.url.empty() && !store::social::discussion_url(counts.url)))
+            __builtin_trap();
+    };
+    store::social::Index likes;
+    if (store::social::parse_index(body, likes))
+        for (const auto &[id, counts] : likes)
+        {
+            if (!title_id(id))
+                __builtin_trap();
+            sane(counts);
+        }
+    store::social::Thread thread;
+    if (store::social::parse_thread(body, "PPSA99500", thread))
+    {
+        sane(thread.counts);
+        if (thread.latest.size() > store::social::kComments)
+            __builtin_trap();
+        for (const auto &comment : thread.latest)
+        {
+            bounded(comment.author, store::social::kAuthorLimit);
+            bounded(comment.text, store::social::kTextLimit);
+            if (comment.text.empty() || (!comment.date.empty() && comment.date.size() != 10))
+                __builtin_trap();
+        }
+    }
+    bounded(store::social::plain(body, store::social::kTextLimit), store::social::kTextLimit);
 }
 } // namespace
 

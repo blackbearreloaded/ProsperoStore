@@ -21,7 +21,8 @@ const char *transport_name();
 enum class Purpose
 {
     catalog,
-    artifact
+    artifact,
+    comments // the likes and comments files: their one address, and nowhere it redirects to
 };
 struct Control
 {

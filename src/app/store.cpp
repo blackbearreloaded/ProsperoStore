@@ -93,6 +93,7 @@ constexpr float kTabH = 44.0f; // the sections in the top bar
 constexpr Rect kPageIcon{96.0f, 146.0f, 144.0f, 144.0f};
 constexpr float kInfoX = 96.0f;
 constexpr float kInfoW = 900.0f;
+constexpr float kFactsW = 1180.0f; // the row of chips may run as far as the title does
 constexpr Rect kActionBox{1336.0f, 212.0f, 488.0f, 604.0f};
 constexpr Rect kPageHero{96.0f, 84.0f, 212.0f, 212.0f}; // the icon, when it is the app's picture
 constexpr float kButtonRadius = 18.0f;
@@ -177,6 +178,27 @@ float pill(gfx::DrawList &list, const ui::Fonts &fonts, std::string_view word, f
         ui::text(list, fonts.semibold, word, x + width * 0.5f, centred(cy, size), size,
                  ink.with_alpha(alpha), gfx::Align::center);
     return width;
+}
+
+// The like sign: an arrow head pointing up, as beside a discussion's title on GitHub.
+void like_sign(gfx::DrawList &list, float x, float cy, float size, Color ink)
+{
+    list.triangle({x, cy - size * 0.5f, size, size * 0.9f}, ink);
+}
+
+// The comment sign: a speech bubble.
+void comment_sign(gfx::DrawList &list, float x, float cy, float size, Color ink)
+{
+    const float height = size * 0.72f;
+    list.bordered_rect({x, cy - height * 0.62f, size, height}, size * 0.22f, kClear,
+                       std::max(1.5f, size * 0.12f), ink);
+    list.triangle({x + size * 0.16f, cy + height * 0.3f, size * 0.38f, size * 0.32f}, ink, 0.0f,
+                  3.14159f);
+}
+
+std::string counted(std::uint32_t count, const char *one, const char *many)
+{
+    return std::to_string(count) + (count == 1 ? one : many);
 }
 
 // The state a card or the banner announces, and how loudly.
@@ -376,11 +398,20 @@ void Screen::rebuild()
         if (in_section(app, section_))
             visible_.push_back(i);
     }
+    const auto likes = [&](const App &app)
+    {
+        const auto *counts = social_shown() ? counts_of(app) : nullptr;
+        return counts ? counts->likes : 0u;
+    };
+    if (sort_ == Sort::liked && !social_shown())
+        sort_ = Sort::name;
     std::stable_sort(visible_.begin(), visible_.end(),
                      [&](auto first, auto second)
                      {
                          const auto &a = apps_[first];
                          const auto &b = apps_[second];
+                         if (sort_ == Sort::liked && likes(a) != likes(b))
+                             return likes(a) > likes(b);
                          if (sort_ == Sort::released && a.released != b.released)
                              return a.released > b.released;
                          if (sort_ == Sort::updated && a.updated != b.updated)
@@ -396,14 +427,27 @@ void Screen::rebuild()
     {
         const auto all = visible_;
         visible_.clear();
-        // order: 0 as listed, 1 the twelve updated last, 2 the twelve listed last.
+        // order: 0 as listed, 1 the twelve updated last, 2 the twelve listed last, 3 the ten
+        // with the most likes (ties by name).
         const auto shelf = [&](std::string title, auto keep, int order)
         {
             std::vector<std::size_t> members;
             for (const auto index : all)
                 if (keep(apps_[index]))
                     members.push_back(index);
-            if (order)
+            if (order == 3)
+            {
+                std::stable_sort(members.begin(), members.end(),
+                                 [&](auto a, auto b)
+                                 {
+                                     return social::more_liked(
+                                         likes(apps_[a]), apps_[a].folded_name, likes(apps_[b]),
+                                         apps_[b].folded_name);
+                                 });
+                if (members.size() > social::kMostLiked)
+                    members.resize(social::kMostLiked);
+            }
+            else if (order)
             {
                 std::stable_sort(members.begin(), members.end(),
                                  [&](auto a, auto b) {
@@ -419,6 +463,7 @@ void Screen::rebuild()
             next.title = std::move(title);
             next.start = static_cast<int>(visible_.size());
             next.count = static_cast<int>(members.size());
+            next.ranked = order == 3;
             for (const auto &old : previous)
                 if (old.title == next.title)
                 {
@@ -465,6 +510,9 @@ void Screen::rebuild()
         }
         else
             shelf("New and updated", current, 1);
+        // The apps people upvoted, in order: there once the likes are known and some app has one.
+        if (social_shown())
+            shelf("Most liked", [&](const App &a) { return current(a) && likes(a) > 0; }, 3);
         shelf("Apps", [&](const App &a) { return a.kind == "app" && listed(a); }, 0);
         shelf("Games", [&](const App &a) { return a.kind == "game" && listed(a); }, 0);
         shelf("Tools", [&](const App &a) { return a.kind == "tool" && listed(a); }, 0);
@@ -492,6 +540,102 @@ void Screen::rebuild()
     lift_.resize(visible_.size());
     appear_.resize(apps_.size());
     fits_stale_ = true;
+}
+
+void Screen::rebuild_in_place()
+{
+    const std::string id = focused() ? focused()->title_id : std::string{};
+    const std::string shelf = focused() && discover() && !shelves_.empty()
+                                  ? shelves_[static_cast<std::size_t>(shelf_of(focus_))].title
+                                  : std::string{};
+    rebuild();
+    if (id.empty())
+        return;
+    int found = -1;
+    for (const auto &next : shelves_)
+        for (int k = 0; next.title == shelf && found < 0 && k < next.count; ++k)
+            if (apps_[visible_[static_cast<std::size_t>(next.start + k)]].title_id == id)
+                found = next.start + k;
+    for (std::size_t k = 0; found < 0 && k < visible_.size(); ++k)
+        if (apps_[visible_[k]].title_id == id)
+            found = static_cast<int>(k);
+    if (found < 0)
+    {
+        details_ = false;
+        return;
+    }
+    focus_ = found;
+    if (discover() && !shelves_.empty())
+    {
+        auto &now = shelves_[static_cast<std::size_t>(shelf_of(focus_))];
+        now.pos = focus_ - now.start;
+    }
+}
+
+// ---- likes and comments ---------------------------------------------------------
+
+const social::Counts *Screen::counts_of(const App &app) const
+{
+    static const social::Counts none;
+    if (!settings_.show_comments || app.local_only || app.extra)
+        return nullptr;
+    // The app's own file, read when its page opened, is the newer word.
+    if (const auto thread = threads_.find(app.title_id); thread != threads_.end())
+        return &thread->second.counts;
+    if (!likes_known_)
+        return nullptr;
+    const auto listed = likes_.find(app.title_id);
+    return listed == likes_.end() ? &none : &listed->second;
+}
+
+// Where the app is liked and commented on: the only thing from these files that is ever used
+// as an address, and only in a code for the player to scan.
+std::string Screen::discussion_of(const App &app) const
+{
+    const auto *counts = counts_of(app);
+    if (counts && social::discussion_url(counts->url))
+        return counts->url;
+    const auto listed = likes_.find(app.title_id);
+    if (counts && listed != likes_.end() && social::discussion_url(listed->second.url))
+        return listed->second.url;
+    return {};
+}
+
+void Screen::set_likes(social::Index likes)
+{
+    if (!settings_.show_comments)
+        return;
+    likes_ = std::move(likes);
+    likes_known_ = true;
+    rebuild_in_place();
+}
+
+void Screen::set_comments(const std::string &id, social::Thread thread)
+{
+    if (!settings_.show_comments)
+        return;
+    threads_.insert_or_assign(id, std::move(thread));
+    if (page_app() && page_app()->title_id == id)
+    {
+        // The reader stays where they were in the article.
+        const float place = article_.scroll();
+        const bool there = at_comments_;
+        refresh_detail();
+        article_.scroll_to(place, true);
+        at_comments_ = there && comments_block_ >= 0;
+    }
+}
+
+void Screen::forget_social()
+{
+    likes_.clear();
+    threads_.clear();
+    likes_known_ = false;
+    discussion_ = false;
+    pending_discussion_link.clear();
+    rebuild_in_place();
+    if (page_app())
+        refresh_detail();
 }
 
 // The grid's cards whose rows are on screen at this scroll, and one row beyond.
@@ -676,6 +820,8 @@ void Screen::refresh_detail()
     const auto &app = *focused();
     using Block = ui::TextBlock;
     std::vector<Block> blocks;
+    comments_block_ = -1;
+    at_comments_ = false;
     if (app.local_only && catalog_current_ &&
         std::any_of(app.installed.begin(), app.installed.end(),
                     [](const auto &installed) { return installed.managed; }))
@@ -693,6 +839,32 @@ void Screen::refresh_detail()
         {
             blocks.push_back(Block::heading("What's new", 3));
             blocks.push_back(Block::paragraph(entry.release_notes));
+        }
+        // The latest comments, once the app's own file is here. Text nobody checked: it was
+        // made plain when it was read, and is only ever drawn as words.
+        if (const auto found = threads_.find(app.title_id);
+            settings_.show_comments && !app.extra && found != threads_.end())
+        {
+            const auto &thread = found->second;
+            comments_block_ = static_cast<int>(blocks.size());
+            blocks.push_back(
+                Block::heading("Comments (" + std::to_string(thread.counts.comments) + ")", 3));
+            for (const auto &comment : thread.latest)
+            {
+                // Who and when on a line of its own, their words set in from a bar under it.
+                blocks.push_back(Block::paragraph(
+                    comment.date.empty() ? comment.author
+                                         : comment.author + "  \xC2\xB7  " + comment.date));
+                blocks.push_back(Block::quote(comment.text));
+            }
+            if (thread.latest.empty())
+                blocks.push_back(Block::paragraph(
+                    thread.counts.comments == 0 ? "No comments yet."
+                                                : "They are in the app's discussion on GitHub."));
+            else if (thread.counts.comments > thread.latest.size())
+                blocks.push_back(Block::paragraph(
+                    "These are the latest " + std::to_string(thread.latest.size()) +
+                    ". The others are in the app's discussion on GitHub."));
         }
         // What the catalog's scan found, in words. It is advice: say what was found, not "safe".
         if (!entry.sandbox.empty())
@@ -995,7 +1167,8 @@ void Screen::update_home(const InputFrame &input, ui::Feedback &feedback)
     }
     if (input.is_pressed(Action::r3))
     {
-        sort_ = static_cast<Sort>((static_cast<unsigned>(sort_) + 1) % 3);
+        // "Most liked" joins the orders once the likes are known.
+        sort_ = static_cast<Sort>((static_cast<unsigned>(sort_) + 1) % (social_shown() ? 4 : 3));
         focus_ = 0;
         rebuild();
         swap_.start(0.3f);
@@ -1285,8 +1458,42 @@ void Screen::update_page(const InputFrame &input, ui::Feedback &feedback)
         open_developer(author);
         feedback.play(audio::Cue::select);
     }
+    else if (comments_block_ >= 0 &&
+             (input.is_pressed(Action::jump_next) || input.is_pressed(Action::jump_prev)))
+    {
+        // R2 goes straight to the comments, however long the release notes are; R2 again, or
+        // L2, goes back to the top. Having scrolled there by hand counts as being there.
+        const float limit = article_.scroll_limit();
+        const float place = std::min(article_.block_offset(comments_block_), limit);
+        const bool there = at_comments_ || (place > 0.5f && article_.scroll() >= place - 1.0f);
+        if (there || input.is_pressed(Action::jump_prev))
+        {
+            article_.scroll_to(0.0f);
+            at_comments_ = false;
+        }
+        else
+        {
+            article_.scroll_to_block(comments_block_);
+            at_comments_ = true;
+        }
+        feedback.play(audio::Cue::select);
+    }
+    else if (input.is_pressed(Action::touch) && !discussion_of(shown).empty())
+    {
+        // Like or comment: on GitHub, from a phone. The store only shows the way there.
+        discussion_link_ = discussion_of(shown);
+        discussion_name_ = shown.name;
+        discussion_ = true;
+        if (discussion_link_ != discussion_qr_link_)
+            pending_discussion_link = discussion_link_;
+        feedback.play(audio::Cue::open);
+    }
     else
+    {
         article_.handle(input, feedback);
+        if (article_.scroll() <= 0.5f)
+            at_comments_ = false; // back at the top by hand
+    }
 }
 
 bool Screen::open_developer(const std::string &author)
@@ -1481,6 +1688,16 @@ void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
                         order(app, Order::Kind::adopt);
         }
     }
+    else if (discussion_)
+    {
+        // The code takes every input until it is closed.
+        if (!details_ || input.is_pressed(Action::back) || input.is_pressed(Action::confirm) ||
+            input.is_pressed(Action::touch))
+        {
+            discussion_ = false;
+            feedback.play(audio::Cue::back);
+        }
+    }
     else if (panel_)
         update_panel(input, feedback);
     else if (input.is_pressed(Action::menu) ||
@@ -1514,6 +1731,9 @@ void Screen::update(const InputFrame &raw, float dt, ui::Feedback &feedback)
     }
     panel_value_.target = panel_ ? 1.0f : 0.0f;
     panel_value_.update(dt, 14.0f);
+    discussion_ = discussion_ && details_;
+    discussion_value_.target = discussion_ ? 1.0f : 0.0f;
+    discussion_value_.update(dt, 16.0f);
     about_.set_active(panel_ && panel_tab_ == 2);
     about_.update(dt);
     news_view_.set_active(panel_ && panel_tab_ == 3);
@@ -1936,6 +2156,7 @@ void Screen::draw_section_header(const ui::Fonts &fonts)
     {
         const char *sort_name = sort_ == Sort::name       ? "Name"
                                 : sort_ == Sort::released ? "Newest release"
+                                : sort_ == Sort::liked    ? "Most liked"
                                                           : "Recently updated";
         const float tw =
             ui::text(list, fonts.regular, std::string("Sorted by ") + sort_name, kRight,
@@ -2029,18 +2250,68 @@ void Screen::draw_tile(const ui::Fonts &fonts, int k, unsigned layers)
         }
     }
     const float marks = in * fade_at(r.y + 26.0f);
+    // Likes and comments, zero included, once they are known: a quiet plate in the tile's
+    // corner. On the "Most liked" shelf the tile says its place, and the counts in words.
+    const auto *counts = social_shown() ? counts_of(app) : nullptr;
+    const bool ranked = counts && discover() && !shelves_.empty() &&
+                        shelves_[static_cast<std::size_t>(shelf_of(k))].ranked;
+    if (ranked && marks > 0.01f)
+    {
+        if (layers & kShapes)
+            list.circle(r.x + 30.0f, r.y + 28.0f, 17.0f, kAccent.with_alpha(marks));
+        if (layers & kSemibold)
+            ui::text(list, fonts.semibold,
+                     std::to_string(k - shelves_[static_cast<std::size_t>(shelf_of(k))].start + 1),
+                     r.x + 30.0f, centred(r.y + 28.0f, 19), 19, kOnAccent.with_alpha(marks),
+                     gfx::Align::center);
+    }
+    else if (counts && marks > 0.01f && (layers & (kShapes | kSemibold)))
+    {
+        const std::string likes = std::to_string(counts->likes),
+                          comments = std::to_string(counts->comments);
+        const float likes_w = fonts.semibold.measure(likes, 17),
+                    comments_w = fonts.semibold.measure(comments, 17);
+        const float width =
+            12.0f + 11.0f + 6.0f + likes_w + 14.0f + 15.0f + 6.0f + comments_w + 13.0f;
+        const float x0 = r.x + r.w - 12.0f - width, cy = r.y + 28.0f;
+        const float bubble = x0 + 29.0f + likes_w + 14.0f;
+        if (layers & kShapes)
+        {
+            list.rounded_rect({x0, cy - 15.0f, width, 30.0f}, 15, kBlack.with_alpha(0.6f * marks));
+            like_sign(list, x0 + 12.0f, cy, 11.0f, kAccent.with_alpha(marks));
+            comment_sign(list, bubble, cy, 15.0f, kInk.with_alpha(0.82f * marks));
+        }
+        if (layers & kSemibold)
+        {
+            ui::text(list, fonts.semibold, likes, x0 + 29.0f, centred(cy, 17), 17,
+                     kInk.with_alpha(marks));
+            ui::text(list, fonts.semibold, comments, bubble + 21.0f, centred(cy, 17), 17,
+                     kInk.with_alpha(marks));
+        }
+    }
+    const float mark_x = r.x + 12.0f + (ranked ? 42.0f : 0.0f);
     if ((working || queued) && marks > 0.01f)
-        pill(list, fonts, offer(app).headline, r.x + 12.0f, r.y + 28.0f, 32.0f, kAccent, kOnAccent,
+        pill(list, fonts, offer(app).headline, mark_x, r.y + 28.0f, 32.0f, kAccent, kOnAccent,
              marks, layers & (kShapes | kSemibold));
     else if (const auto state = mark(app); state.word && marks > 0.01f)
-        pill(list, fonts, state.word, r.x + 12.0f, r.y + 28.0f, 32.0f,
+        pill(list, fonts, state.word, mark_x, r.y + 28.0f, 32.0f,
              state.loud ? kAccent : kBlack.with_alpha(0.6f), state.loud ? kOnAccent : kInk, marks,
              layers & (kShapes | kSemibold));
     const float x = r.x + (keyart && app.icon ? 78.0f : 20.0f);
     if (layers & kSemibold)
         ui::text(list, fonts.semibold, fits_[index].title, x, r.y + r.h - 40.0f, 24,
                  kInk.with_alpha(foot * (0.9f + 0.1f * lift)));
-    if (app.badge == "Installed")
+    if (ranked)
+    {
+        if (layers & kShapes)
+            like_sign(list, x, r.y + r.h - 22.0f, 12.0f, kAccent.with_alpha(foot));
+        if (layers & kRegular)
+            ui::text(list, fonts.regular,
+                     counted(counts->likes, " like", " likes") + "  \xC2\xB7  " +
+                         counted(counts->comments, " comment", " comments"),
+                     x + 20.0f, r.y + r.h - 16.0f, 18, kInk.with_alpha(0.8f * foot));
+    }
+    else if (app.badge == "Installed")
     {
         if (layers & kShapes)
             draw_check(list, x + 7.0f, r.y + r.h - 22.0f, 14.0f, kOwned.with_alpha(foot));
@@ -2784,7 +3055,7 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
             return;
         const float width = fonts.semibold.measure(word, 20) + 36.0f;
         if (cx + width >
-            kInfoX + kInfoW) // a chip that doesn't fit is left out; the article says it
+            kInfoX + kFactsW) // a chip that doesn't fit is left out; the article says it
             return;
         list.bordered_rect({cx, 532.0f, width, 42.0f}, 21, kInk.with_alpha(0.08f), 1.5f,
                            kInk.with_alpha(0.22f));
@@ -2803,6 +3074,27 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
         chip(app.detail->sandbox == "stays"    ? std::string("Stays in sandbox")
              : app.detail->sandbox == "leaves" ? std::string("Leaves sandbox")
                                                : std::string());
+    }
+    // Likes and comments join the facts, zero included, each behind its sign.
+    if (const auto *counts = counts_of(app))
+    {
+        const auto fact = [&](bool like, const std::string &word)
+        {
+            const float width = fonts.semibold.measure(word, 20) + 62.0f;
+            if (cx + width > kInfoX + kFactsW)
+                return;
+            list.bordered_rect({cx, 532.0f, width, 42.0f}, 21, kInk.with_alpha(0.08f), 1.5f,
+                               kInk.with_alpha(0.22f));
+            if (like)
+                like_sign(list, cx + 18.0f, 553.0f, 14.0f, kAccent);
+            else
+                comment_sign(list, cx + 17.0f, 554.0f, 17.0f, kInk.with_alpha(0.88f));
+            ui::text(list, fonts.semibold, word, cx + 44.0f, centred(553.0f, 20), 20,
+                     kInk.with_alpha(0.88f));
+            cx += width + 12.0f;
+        };
+        fact(true, counted(counts->likes, " like", " likes"));
+        fact(false, counted(counts->comments, " comment", " comments"));
     }
     ui::Canvas canvas{list, fonts, glass, time_};
     article_.draw(canvas);
@@ -2845,6 +3137,53 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
                        radius);
         list.bordered_rect(cover, radius, kClear, 1.5f, kInk.with_alpha(0.18f * veil));
     }
+}
+
+// "Like or comment": a code for the app's discussion on GitHub, to scan with a phone. The
+// address was checked when it was read (social::discussion_url) and again before it got here.
+void Screen::draw_discussion(const ui::Fonts &fonts, std::uint32_t glass)
+{
+    const float t = tween::clamp01(discussion_value_.value);
+    if (t <= 0.004f)
+        return;
+    auto &list = overlay_;
+    list.rounded_rect({0, 0, kWidth, kHeight}, 0, kBlack.with_alpha(0.66f * t));
+    list.push_opacity(tween::smoothstep(t));
+    list.push_transform(1.0f, 0, 0, 0, 24.0f * motion() * (1.0f - tween::cubic_out(t)));
+    const Rect panel{530.0f, 122.0f, 860.0f, 800.0f};
+    list.shadow({panel.x, panel.y + 24.0f, panel.w, panel.h}, 32, 60, kBlack.with_alpha(0.5f));
+    list.glass(glass, panel, 32, kWhite);
+    list.rounded_rect(panel, 32, gfx::mix(kDeep, kMid, 0.16f).with_alpha(0.86f));
+    list.gradient_rect({panel.x, panel.y, panel.w, 140.0f}, 32, kInk.with_alpha(0.07f),
+                       kInk.with_alpha(0.0f));
+    list.bordered_rect(panel, 32, kClear, 1.5f, kInk.with_alpha(0.22f));
+    const float cx = panel.cx();
+    ui::text(list, fonts.semibold, "LIKE OR COMMENT", cx, panel.y + 66.0f, 18, kAccent,
+             gfx::Align::center, 4.0f);
+    ui::text(list, fonts.display, fonts.display.font->fit(discussion_name_, 44, panel.w - 96.0f),
+             cx, panel.y + 124.0f, 44, kInk, gfx::Align::center);
+    // Twice the code's own size when that fits: every module lands on whole pixels.
+    const float doubled = static_cast<float>(discussion_qr_width_) * 2.0f;
+    const float size = doubled >= 300.0f && doubled <= 420.0f ? doubled : 400.0f;
+    const Rect code{cx - size * 0.5f, panel.y + 372.0f - size * 0.5f, size, size};
+    list.rounded_rect(code.inset(-14.0f), 22, kWhite);
+    if (discussion_qr_ != 0 && discussion_qr_link_ == discussion_link_)
+        list.image(discussion_qr_, code, gfx::kFullUv, kWhite);
+    else
+        list.arc(cx, code.cy(), 40.0f, 6.0f, time_ * 3.4f, 1.7f, kOnAccent);
+    ui::text(list, fonts.semibold, "Scan it to open this app's discussion on GitHub on your phone.",
+             cx, panel.y + 644.0f, 24, kInk, gfx::Align::center);
+    ui::text(list, fonts.regular, "Liking and commenting need a GitHub account.", cx,
+             panel.y + 682.0f, 22, kInk.with_alpha(0.72f), gfx::Align::center);
+    ui::text(list, fonts.mono, fonts.mono.font->fit(discussion_link_, 17, panel.w - 96.0f), cx,
+             panel.y + 722.0f, 17, kInk.with_alpha(0.5f), gfx::Align::center);
+    const float close = fonts.regular.measure("Close", 22);
+    ui::draw_button(list, fonts, ui::GlyphStyle::dark(), ui::Button::circle,
+                    cx - (30.0f + 12.0f + close) * 0.5f, panel.y + 762.0f, 30);
+    ui::text(list, fonts.regular, "Close", cx - (30.0f + 12.0f + close) * 0.5f + 42.0f,
+             centred(panel.y + 762.0f, 22), 22, kInk.with_alpha(0.8f));
+    list.pop_transform();
+    list.pop_opacity();
 }
 
 // The opening. The store's mark, as on its icon: three glass tiles and a gold one
@@ -3010,17 +3349,25 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
         home[homes++] = {ui::Button::circle, "Hold to close"};
     // The page's row names the one thing Cross does for this app, when it can.
     const Offer state = focused() ? offer(*focused()) : Offer{};
-    ui::Hint detail[6];
+    ui::Hint detail[8];
     int details = 0;
     if (state.armed)
         detail[details++] = {ui::Button::cross, state.label.c_str()};
     if (state.uninstall && installer_ && guard_ && !state.busy)
         detail[details++] = {ui::Button::square, "Uninstall"};
-    detail[details++] = {ui::Button::dpad, "Scroll"};
+    // With comments on the page R2 jumps to them; the row then has no room to also say that
+    // the D-pad scrolls when Uninstall is on it.
+    const bool jump = details_ && comments_block_ >= 0;
+    if (!jump || details < 2)
+        detail[details++] = {ui::Button::dpad, "Scroll"};
+    if (jump)
+        detail[details++] = {ui::Button::r2, at_comments_ ? "Top" : "Comments"};
     if (focused() && !focused()->local_only)
         detail[details++] = {ui::Button::triangle, "Refresh"};
     if (focused() && !focused()->local_only && !focused()->author.empty())
         detail[details++] = {ui::Button::right_stick, "More by this developer"};
+    if (focused() && !discussion_of(*focused()).empty())
+        detail[details++] = {ui::Button::touchpad, "Like or comment"};
     detail[details++] = {ui::Button::circle, "Back"};
     // A hint row leaves as the next layer arrives, so two are never legible at once.
     scene_.push_opacity(1.0f - tween::clamp01(page * 3.0f));
@@ -3036,6 +3383,7 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
         overlay_.pop_opacity();
     }
     draw_job_card(fonts, glass);
+    draw_discussion(fonts, glass);
     draw_panel(fonts, glass);
     ui::Canvas canvas{overlay_, fonts, glass, time_};
     if (notes_open_)
@@ -3107,7 +3455,8 @@ std::string format_settings(const Settings &settings)
            "\nverify_signatures=" + (settings.verify_signatures ? "1" : "0") +
            "\nuse_official=" + (settings.use_official ? "1" : "0") +
            "\nuse_custom=" + (settings.use_custom ? "1" : "0") +
-           "\nnews_seen=" + settings.news_seen + "\n";
+           "\nnews_seen=" + settings.news_seen +
+           "\nshow_comments=" + (settings.show_comments ? "1" : "0") + "\n";
 }
 
 Settings parse_settings(std::string_view text)
@@ -3144,6 +3493,8 @@ Settings parse_settings(std::string_view text)
             settings.use_custom = value == "1";
         else if (key == "news_seen" && value.size() <= 64)
             settings.news_seen = value;
+        else if (key == "show_comments")
+            settings.show_comments = value == "1";
     }
     // A custom catalog with no address is not one: the official catalog alone.
     if (!settings.custom_active())
@@ -3339,7 +3690,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         if (development_options_ && input.is_pressed(Action::back))
         {
             development_options_ = false;
-            setting_focus_ = 6;
+            setting_focus_ = 7;
             feedback.play(audio::Cue::back);
             return;
         }
@@ -3392,7 +3743,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         news_view_.handle(input, feedback);
         return;
     }
-    const int kRows = development_options_ ? 5 : 8;
+    const int kRows = development_options_ ? 5 : 9;
     if (step)
     {
         const int next = setting_focus_ + step;
@@ -3409,9 +3760,17 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         return;
     const int setting = development_options_  ? setting_focus_ + 5
                         : setting_focus_ < 5  ? setting_focus_
-                        : setting_focus_ == 5 ? 12
-                                              : setting_focus_ + 4;
-    if (setting == 12)
+                        : setting_focus_ == 5 ? 13
+                        : setting_focus_ == 6 ? 12
+                                              : setting_focus_ + 3;
+    if (setting == 13)
+    {
+        // Off: nothing more is read from GitHub, and what was read is forgotten at once.
+        settings_.show_comments = !settings_.show_comments;
+        if (!settings_.show_comments)
+            forget_social();
+    }
+    else if (setting == 12)
     {
         settings_.debug_log = !settings_.debug_log;
         if (settings_.debug_log)
@@ -3427,7 +3786,7 @@ void Screen::update_panel(const InputFrame &input, ui::Feedback &feedback)
         }
         return;
     }
-    if (setting == 0)
+    else if (setting == 0)
     {
         if (locations_.size() < 2)
             return refuse(feedback, input.nav_repeat, static_cast<float>(turn), 0.0f);
@@ -3578,6 +3937,11 @@ void sign(gfx::DrawList &list, int which, float cx, float cy, Color ink)
         list.line(cx - 14.0f, cy - 6.0f, cx - 3.0f, cy - 6.0f, 2.5f, ink.with_alpha(ink.a * 0.35f));
         list.line(cx - 16.0f, cy, cx - 4.0f, cy, 2.5f, ink.with_alpha(ink.a * 0.6f));
         list.line(cx - 14.0f, cy + 6.0f, cx - 3.0f, cy + 6.0f, 2.5f, ink.with_alpha(ink.a * 0.35f));
+        break;
+    case 9: // likes and comments: a speech bubble
+        list.bordered_rect({cx - 13.0f, cy - 12.0f, 26.0f, 19.0f}, 5, kClear, 2.5f, ink);
+        list.triangle({cx - 8.0f, cy + 5.0f, 9.0f, 8.0f}, ink, 0.0f, 3.14159f);
+        list.line(cx - 6.0f, cy - 3.0f, cx + 6.0f, cy - 3.0f, 2.0f, ink.with_alpha(ink.a * 0.6f));
         break;
     case 30: // news: a page with lines
         list.bordered_rect({cx - 11.0f, cy - 13.0f, 22.0f, 26.0f}, 4, kClear, 2.5f, ink);
@@ -3833,6 +4197,9 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
              false},
             {4, "Debug log", "Records every step for a report: see About, or debug-trace.txt.", 1,
              "", settings_.debug_log},
+            {9, "Show likes and comments",
+             "From each app's discussion on GitHub; read from GitHub while this is on.", 1, "",
+             settings_.show_comments},
         };
         float y = panel.y + 32.0f;
         if (development_options_)
@@ -3844,13 +4211,14 @@ void Screen::draw_panel(const ui::Fonts &fonts, std::uint32_t glass)
             y += 112.0f;
         }
         const int first = std::max(0, setting_focus_ - 5);
-        const int count = development_options_ ? 5 : 8;
+        const int count = development_options_ ? 5 : 9;
         for (int focus = first; focus < std::min(first + 6, count); ++focus)
         {
             const int i = development_options_ ? focus + 5
                           : focus < 5          ? focus
-                          : focus == 5         ? 12
-                                               : focus + 4;
+                          : focus == 5         ? 13
+                          : focus == 6         ? 12
+                                               : focus + 3;
             const Rect row{px - 16.0f, y, pw + 32.0f, 108.0f};
             if (focus == setting_focus_)
                 row_focus(row);

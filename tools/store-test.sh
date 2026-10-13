@@ -71,8 +71,8 @@ if (( fuzz_seconds > 0 )); then
     done
     clang++ -std=c++20 "${flags[@]}" -fsanitize=fuzzer -Wall -Wextra -Wpedantic -Werror \
         -I"$root/src" "$root/tests/store_fuzz.cpp" "$root/src/install/archive.cpp" \
-        "$root/src/install/files.cpp" "$root/src/catalog/catalog.cpp" "${fuzzed[@]}" \
-        -o "$build/store-fuzz"
+        "$root/src/install/files.cpp" "$root/src/catalog/catalog.cpp" \
+        "$root/src/social/comments.cpp" "${fuzzed[@]}" -o "$build/store-fuzz"
     rm -rf "$build/fuzz-corpus"
     mkdir -p "$build/fuzz-corpus"
     python3 - "$build/fuzz-corpus" <<'PY'
@@ -98,6 +98,12 @@ records = [
     json.dumps({"schema": 3, "apps": [{"titleid": "PPSA99500", "name": "App", "kind": "app",
                                        "status": "available", "format": "zip", "size": 1}]}),
     json.dumps({"schema": 3, "apps": {"PPSA99500": {"content_version": "01.000.001"}}}),
+    json.dumps({"schema": 1, "apps": {"PPSA99500": {
+        "discussion": 1, "url": "https://github.com/o/r/discussions/1", "likes": 2, "comments": 1}}}),
+    json.dumps({"schema": 1, "titleid": "PPSA99500", "likes": 2, "comments": 1,
+                "url": "https://github.com/o/r/discussions/1",
+                "latest": [{"author": "someone", "date": "2026-10-12T00:00:00Z",
+                            "text": "Plain text, at most 500 characters."}]}),
 ]
 for index, record in enumerate(records):
     (corpus / f"json-{index}").write_bytes(b"\x00" + record.encode())
@@ -118,6 +124,13 @@ clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" 
     "$root/src/catalog/client.cpp" "$root/src/core/save_file.cpp" "${objects[@]}" \
     -o "$build/mirror-test"
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/mirror-test"
+# Likes and comments: the address rule, the plain-text rule and the two parsers.
+clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" \
+    -DSTORE_TEST_FIXTURES="\"$root/tests/fixtures/comments\"" \
+    "$root/tests/store_comments_test.cpp" "$root/src/social/comments.cpp" \
+    "$root/src/catalog/catalog.cpp" "$root/src/net/http.cpp" "${objects[@]}" \
+    -o "$build/comments-test"
+ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/comments-test"
 clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" \
     "$root/tests/store_http_test.cpp" "$root/src/catalog/catalog.cpp" \
     "$root/src/net/http.cpp" "${objects[@]}" -o "$build/http-test"
@@ -130,7 +143,9 @@ ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/icons-test"
 clang -std=c11 "${flags[@]}" -Wall -Wextra -Werror -c "$root/src/system/update_check.c" \
     -o "$build/update_check.o"
 clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" \
+    -DSTORE_TEST_FIXTURES="\"$root/tests/fixtures/comments\"" \
     "$root/tests/store_service_test.cpp" "$root/src/app/service.cpp" \
+    "$root/src/social/comments.cpp" \
     "$root/src/system/inventory.cpp" "$root/src/system/locations.cpp" \
     "$root/src/core/qr.cpp" \
     "$root/src/catalog/icons.cpp" "$root/src/catalog/catalog.cpp" \
