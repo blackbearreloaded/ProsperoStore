@@ -280,12 +280,12 @@
       "assets/fonts/Montserrat-LICENSE.txt": "41f82bb4d24b304f30f7136bc47abdd083782e4265c984160f5649d1e78ea49c",
       "assets/fonts/PatrickHand-LICENSE.txt": "377f4f9c19e935228552478eb68cc2ed82910988a60ba60e2ac73b09f32d02d1",
       "assets/fonts/PressStart2P-LICENSE.txt": "705960c3281a5765ecc0b59bd4ed7ca59eed165748076bc2fc3e8fdbfeb944b0",
-      "assets/fonts/dejavu-sans-mono.huifont": "84d8db8c0650faace68a31286953d5a2f5681f920c51290ee5c385b398acba43",
-      "assets/fonts/inter-regular.huifont": "e8a7f447a5182ab466a7cc39cb99b58eda2b2717b9a0e05c5dbabe23d18051cf",
-      "assets/fonts/inter-semibold.huifont": "affcc3bda4e07bdc2b71aba3bd701b88a5ea728b33640671dd604ae1e64c948a",
-      "assets/fonts/montserrat-medium.huifont": "29332ab3fa2a07b67978fa8a9f5411a1a5b042309f8996cb7cd6785a3e13bbf9",
-      "assets/fonts/patrick-hand.huifont": "5e1f423eb8d330fb71d7c5a95fa59d400d6942a835a4fdd26522f69abce2fc92",
-      "assets/fonts/press-start-2p.huifont": "e9ddf4dd2ab7207c996ede28620f4205594d3f99206fb7edea5af28212dd74a5",
+      "assets/fonts/dejavu-sans-mono.huifont": "49729e0a3060b0ee65f690877b1ec61bc8d2e4fbdf9d5b3c1eac430250f841f3",
+      "assets/fonts/inter-regular.huifont": "790919af8d523bd38eecf5663d04c5654f2cc9c50339275af7aaf8070f7c6846",
+      "assets/fonts/inter-semibold.huifont": "55d32bcad6299d9de5ecd9b65ab194ffe24a60841dbd1117fdd28704fb35cf18",
+      "assets/fonts/montserrat-medium.huifont": "eeeb8847480cc26ca6a296d6de772ff74d5ee3fe0da71083f4e8b9155a162fb0",
+      "assets/fonts/patrick-hand.huifont": "4f9b5e85146252668fc0d1885e5442ee41a03a3446de07f4d8544c0f57044ba8",
+      "assets/fonts/press-start-2p.huifont": "f2b6f5f268e0b3f0ac7eba8bcbf4c29c7736feb9e67389c6309b91acb9aba5fa",
       "host/platform_host.cpp": "7a4153b7eff3187e70680da66c771d5b8aa2328f0f1869a6ec52b849f94dfeed",
       "src/audio/cues.cpp": "25384afdaedb502cd7a3f5c8bf3618825092019289d5b6ce40df057631ff426a",
       "src/audio/cues.hpp": "ca3c3961ae2086abe429d76e8d7c30dea3b669c5a0a4553f3eaaad6932a0db2c",
@@ -533,6 +533,12 @@
       "src/core/held_step.hpp": "0ef176e4fb308a184c74fff82364528fa334f43964073af0d93abe46bc0a6503"
     },
     "local_changes": {
+      "assets/fonts/dejavu-sans-mono.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
+      "assets/fonts/inter-regular.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
+      "assets/fonts/inter-semibold.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
+      "assets/fonts/montserrat-medium.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
+      "assets/fonts/patrick-hand.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
+      "assets/fonts/press-start-2p.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
       "src/platform/ps5/ime.cpp": "The keyboard's Enter key label is a parameter (Ime::Enter): Go for an address, Search for search. Store-only until the kit takes it.",
       "src/platform/ps5/ime.hpp": "The keyboard's Enter key label is a parameter (Ime::Enter): Go for an address, Search for search. Store-only until the kit takes it."
     }

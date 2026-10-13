@@ -38,6 +38,19 @@ const Color kCoal = Color::rgb(0x0e0f12);
 const Color kPanel = gfx::mix(Color::rgb(0x202228), kDeep, 0.5f);
 const Color kOwned = Color::rgb(0x8fdab2); // "this is installed"
 
+// The headline face has no Greek letters. A name it cannot draw whole is set in
+// the title face, which has every letter the store's fonts carry.
+const ui::FontRef &face_for(std::string_view text, const ui::FontRef &wanted,
+                            const ui::FontRef &complete)
+{
+    for (std::size_t index = 0; index < text.size();)
+    {
+        if (!wanted.font->has_glyph(gfx::next_codepoint(text, &index)))
+            return complete;
+    }
+    return wanted;
+}
+
 constexpr float kWidth = gfx::kVirtualWidth;
 constexpr float kHeight = gfx::kVirtualHeight;
 constexpr float kMargin = 96.0f;
@@ -1789,8 +1802,9 @@ void Screen::draw_stage(const ui::Fonts &fonts)
         list.rounded_rect({kMargin, kStageKickerY - 9.0f, 28.0f, 3.0f}, 1.5f, kAccent);
         ui::text(list, fonts.semibold, kicker, kMargin + 40.0f, kStageKickerY, 18, kAccent,
                  gfx::Align::left, 4.0f);
-        ui::text(list, fonts.display, fonts.display.font->fit(app.name, 92, 1180.0f),
-                 kMargin - 4.0f, kStageTitleY, 92, kInk);
+        const ui::FontRef &headline = face_for(app.name, fonts.display, fonts.semibold);
+        ui::text(list, headline, headline.font->fit(app.name, 92, 1180.0f), kMargin - 4.0f,
+                 kStageTitleY, 92, kInk);
         std::string meta = app.author;
         const auto add = [&](const std::string &part)
         {
@@ -2753,8 +2767,9 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
     }
     ui::text(list, fonts.semibold, ui::upper(app.local_only ? "installed" : app.kind), kInfoX, 362,
              20, kAccent, gfx::Align::left, 4.0f);
-    ui::text(list, fonts.display, fonts.display.font->fit(app.name, 84, 1180.0f), kInfoX - 4.0f,
-             450, 84, kInk);
+    const ui::FontRef &headline = face_for(app.name, fonts.display, fonts.semibold);
+    ui::text(list, headline, headline.font->fit(app.name, 84, 1180.0f), kInfoX - 4.0f, 450, 84,
+             kInk);
     std::string line = app.author;
     if (!app.released.empty())
         line += (line.empty() ? "" : "  \xC2\xB7  ") + std::string("Released ") +

@@ -12,6 +12,10 @@ clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" 
     "$root/tests/store_locations_test.cpp" "$root/src/system/locations.cpp" -o "$build/locations-test"
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/locations-test"
 clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" \
+    -DSTORE_FONTS="\"$root/assets/fonts\"" \
+    "$root/tests/store_fonts_test.cpp" "$root/src/gfx/font.cpp" -o "$build/fonts-test"
+ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/fonts-test"
+clang++ -std=c++20 "${flags[@]}" -Wall -Wextra -Wpedantic -Werror -I"$root/src" \
     "$root/tests/store_storage_test.cpp" "$root/src/system/storage_probe.cpp" \
     "$root/src/system/locations.cpp" -o "$build/storage-test"
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 "$build/storage-test"
