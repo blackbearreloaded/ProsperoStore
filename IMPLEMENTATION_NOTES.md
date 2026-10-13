@@ -76,7 +76,7 @@ full image discovery parity, and stale-receipt cleanup remain incomplete.
 - Homebrew UI: the commit in `FOUNDATIONS.json` (the store's eight local UI commits
   rebased on the library's `456cf57`: grid over a count, held-step, program build
   times, `mkstemp` for the shader cache, splash held to the first frame).
-- Rendering uses the pinned ps5-opengl SDK 1.0.0 tooling configuration.
+- Rendering uses the pinned ps5-opengl SDK 1.0.2 tooling configuration.
 
 Foundation files are imported as whole pinned sets. Generic fixes belong in the
 foundation first; store-specific screens, catalog, system policy, and installer

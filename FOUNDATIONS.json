@@ -199,6 +199,14 @@
   {
     "repository": "https://github.com/blackbearreloaded/ps5-homebrew-ui",
     "commit": "6f11ea5ea8edc496e1f7925b9ca389541ecd0381",
+    "overlays": [
+      {
+        "commit": "dbf8286661224c7d8b01fdea62052251eec43eca",
+        "files": [
+          "tools/fetch-opengl-sdk.sh"
+        ]
+      }
+    ],
     "files": {
       "assets/audio/sfx/glass/back_01.wav": "132a55c945c7a3f17d52ccd513c8f162508a301cbcdca1c3bea376af7e06d8b9",
       "assets/audio/sfx/glass/error_01.wav": "ab0fe700bb8d245f5e42ea2484045908c39971459aafeb985c7413caa30fcf85",
@@ -508,7 +516,7 @@
       "third_party/stb/UPSTREAM": "eb56a6230086b3837a77ee0d347136870efec58a28ca686c66f3f2b54baab742",
       "third_party/stb/stb_image_write.h": "cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05",
       "third_party/stb/stb_truetype.h": "ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab",
-      "tools/fetch-opengl-sdk.sh": "9044a4c08b98318a0af26608f3cec01b7463645e3db3b16d27e1a81553bcd02e",
+      "tools/fetch-opengl-sdk.sh": "1052f77890ad5ee48cef24c0515ce1c99cc789e8b696efd228a1d462b65a0b16",
       "tools/prepare-opengl.sh": "ddf2c8680418ef525d0170a1e154d28b7b186178ff18f212ec9bc267400094db",
       "src/core/image.cpp": "d34bde4d2d46df23d9f40598dce61aeb6f147ecedf77e9a6457b6a5eaa6f4af4",
       "src/core/image.hpp": "ffb5586197d5bccb8b77c6d005c621c8aa7f8386d29395cae842924fc0d4bd91",

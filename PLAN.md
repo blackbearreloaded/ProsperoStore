@@ -25,7 +25,7 @@ duplicates them:
 - **[ps5-homebrew-ui](https://github.com/blackbearreloaded/ps5-homebrew-ui)** (Homebrew UI Lab, private), the UI library: its
   renderer, component library, themes, sound and its `store` design.
 
-Rendering is [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) (OpenGL 4.6 Core, SDK 1.0.0). The catalog side
+Rendering is [ps5-opengl](https://github.com/blackbearreloaded/ps5-opengl) (OpenGL 4.6 Core, SDK 1.0.2). The catalog side
 is the store API specified in the
 [catalog repository](https://github.com/blackbearreloaded/ps5-homebrew-catalog)'s `docs/api.md`. Console work follows the
 [ps5-agent-runbook](https://github.com/blackbearreloaded/ps5-agent-runbook). [Foundations](#foundations) says how the store
@@ -176,7 +176,7 @@ passes every line is the goal; a larger one that misses lines is not.
 | Store API, `https://homebrew.page/api/v1/` | Catalog data, versions, icons | Live. Specified in the catalog's `docs/api.md`; versioned (`schema` 3) and signed. |
 | [`ps5-native-app-boilerplate`](https://github.com/blackbearreloaded/ps5-native-app-boilerplate) | Build, packaging, runtime, title layout (see [Foundations](#foundations)) | In use by every Prospero app. |
 | Sandbox elevation (`docs/SANDBOX_ELEVATION.md` in the boilerplate) | Reaching `/data` and the other install locations | Used by ProsperoEden. |
-| [`ps5-opengl`](https://github.com/blackbearreloaded/ps5-opengl) SDK 1.0.0 | Rendering | Passed the OpenGL 4.6 conformance run. |
+| [`ps5-opengl`](https://github.com/blackbearreloaded/ps5-opengl) SDK 1.0.2 | Rendering | SDK 1.0.0 passed the OpenGL 4.6 conformance run.  |
 | [`ps5-homebrew-ui`](https://github.com/blackbearreloaded/ps5-homebrew-ui) | Components, themes, sound, the `store` design, the PC host renderer, the remote test requests (see [Foundations](#foundations)) | All 21 designs validated on a console at 4K, 16.68 ms average frame. |
 | libcurl 8.18.0 + OpenSSL 3.5.2 (PacBrew), with the boilerplate's `console_curl.c` | HTTPS, elevated | **[proven]** elevated in ProsperoRadio and sandboxed in ProsperoLichess, with certificate checks against the console's `CA_LIST.cer`. |
 | `sceHttp` / `sceSsl` / `sceNet` | HTTPS, sandboxed only | **[proven]** in a sandbox; fails on every public site once elevated (3.2), so the store can't use it. |
