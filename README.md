@@ -149,6 +149,7 @@ console test harness.
 | Settings | Options | F10 or the Menu key |
 | Sort | R3 | F5 |
 | Like or comment, on an app's page | Touchpad | F6 |
+| To an app's comments and back to the top, on its page | R2 (L2 also goes back) | F7 |
 
 ## Updating ProsperoStore
 
@@ -175,7 +176,8 @@ off the store asks GitHub for nothing and shows none of it. With it on:
 - Discover has a **Most liked** shelf, the ten apps with the most likes in order (it is there
   when some app has a like), and each section's grid can be sorted by "Most liked";
 - an app's page shows its likes and comments among its facts, and a **Comments** block after the
-  release notes with the latest ten: who, when and what they wrote;
+  release notes with the latest ten: who, when and what they wrote. R2 jumps straight to it,
+  and R2 again or L2 goes back to the top;
 - the Touchpad on an app's page shows a QR code for the app's discussion. Scan it with your
   phone to like the app or to write a comment there. Both happen on GitHub and need a GitHub
   account; the store itself never writes anything.

@@ -329,7 +329,7 @@ static void check_keyboard_keys()
     assert(press({store::hid::kPageDown}) == kR1 && press({store::hid::kPageUp}) == kL1);
     assert(press({store::hid::kSlash}) == kTriangle && press({store::hid::kDelete}) == kSquare);
     assert(press({store::hid::kF10}) == kOptions && press({store::hid::kF5}) == kR3);
-    assert(press({store::hid::kF6}) == kTouchpad);
+    assert(press({store::hid::kF6}) == kTouchpad && press({store::hid::kF7}) == kR2);
     assert(press({store::hid::kDown, store::hid::kEnter}) == (kDown | kCross));
     assert(press({0x04 /* A */}) == 0 && press({}) == 0);
 }
@@ -594,11 +594,31 @@ static void check_likes_and_comments()
     screen.update(touch, 1.0f / 60.0f, quiet);
     assert(!screen.discussion_open());
     // The app's own file is the newer word on its address, and one that is not GitHub's is
-    // never offered.
+    // never offered. Until that file is here R2 has nowhere to jump to.
+    hui::InputFrame jump, jump_back;
+    jump.pressed = hui::action_bit(hui::Action::jump_next);
+    jump_back.pressed = hui::action_bit(hui::Action::jump_prev);
+    store::catalog::Entry listed;
+    listed.id = a.title_id;
+    listed.description = "Words.";
+    listed.release_notes = "Notes.";
+    screen.set_detail(listed);
+    screen.update(jump, 1.0f / 60.0f, quiet);
+    assert(!screen.at_comments());
     social::Thread thread;
     thread.counts = {9, 1, base + "11"};
     thread.latest = {{"someone", "2026-10-12", "Plain words."}};
     screen.set_comments(a.title_id, thread);
+    // R2 goes to the comments and R2 again back; L2 goes back too, and never forward.
+    screen.update(jump, 1.0f / 60.0f, quiet);
+    assert(screen.at_comments() && screen.page_open());
+    screen.update(jump, 1.0f / 60.0f, quiet);
+    assert(!screen.at_comments());
+    screen.update(jump_back, 1.0f / 60.0f, quiet);
+    assert(!screen.at_comments());
+    screen.update(jump, 1.0f / 60.0f, quiet);
+    screen.update(jump_back, 1.0f / 60.0f, quiet);
+    assert(!screen.at_comments() && screen.page_open());
     screen.update(touch, 1.0f / 60.0f, quiet);
     assert(screen.pending_discussion_link == base + "11");
     screen.pending_discussion_link.clear();
@@ -908,8 +928,10 @@ int main(int argc, char **argv)
                 }
                 else
                 {
+                    // "comments-jump-<TITLEID>": the page after R2 (pressed further down).
                     const bool code = mode.starts_with("comments-code-");
-                    const std::string id = mode.substr(code ? 14 : 9);
+                    const bool jumped = mode.starts_with("comments-jump-");
+                    const std::string id = mode.substr(code || jumped ? 14 : 9);
                     screen.set_installer(true, true, "", "/data/homebrew");
                     screen.set_running({}, true);
                     screen.set_locations({{"/data/homebrew", 548ull << 30}});
@@ -1336,6 +1358,16 @@ int main(int argc, char **argv)
                 for (int frame = 0; frame < 30; ++frame)
                     screen.update({}, 1.0f / 60.0f, feedback);
             }
+            screen.draw(renderer, fonts.refs);
+        }
+        if (argc == 5 && std::string(argv[4]).starts_with("comments-jump-"))
+        {
+            // R2, once the article has been laid out: straight to the comments.
+            hui::InputFrame jump;
+            jump.pressed = hui::action_bit(hui::Action::jump_next);
+            screen.update(jump, 1.0f / 60.0f, feedback);
+            for (int frame = 0; frame < 60; ++frame)
+                screen.update({}, 1.0f / 60.0f, feedback);
             screen.draw(renderer, fonts.refs);
         }
         if (argc == 5 && std::string(argv[4]) == "detail-end")

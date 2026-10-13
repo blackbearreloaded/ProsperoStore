@@ -143,6 +143,11 @@ class Screen
     {
         return discussion_;
     }
+    // R2 on an app's page took the article to its comments (R2 again, or L2, goes back up).
+    bool at_comments() const
+    {
+        return at_comments_;
+    }
     // A developer's page: every app by one developer, opened from an app's page (R3) and
     // left with Circle. The link is the developer's (catalog::developer_link); the frame
     // loop turns the pending one into a code.
@@ -383,6 +388,9 @@ class Screen
     void draw_discussion(const hui::ui::Fonts &fonts, std::uint32_t glass);
     social::Index likes_;
     bool likes_known_ = false;
+    // Where "Comments (N)" is in the open page's article, or -1 when it has none.
+    int comments_block_ = -1;
+    bool at_comments_ = false;
     std::map<std::string, social::Thread> threads_;
     bool discussion_ = false;
     hui::tween::Spring discussion_value_;

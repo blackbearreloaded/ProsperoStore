@@ -606,8 +606,10 @@ void Screen::set_comments(const std::string &id, social::Thread thread)
     {
         // The reader stays where they were in the article.
         const float place = article_.scroll();
+        const bool there = at_comments_;
         refresh_detail();
         article_.scroll_to(place, true);
+        at_comments_ = there && comments_block_ >= 0;
     }
 }
 
@@ -805,6 +807,8 @@ void Screen::refresh_detail()
     const auto &app = *focused();
     using Block = ui::TextBlock;
     std::vector<Block> blocks;
+    comments_block_ = -1;
+    at_comments_ = false;
     if (app.local_only && catalog_current_ &&
         std::any_of(app.installed.begin(), app.installed.end(),
                     [](const auto &installed) { return installed.managed; }))
@@ -829,6 +833,7 @@ void Screen::refresh_detail()
             settings_.show_comments && !app.extra && found != threads_.end())
         {
             const auto &thread = found->second;
+            comments_block_ = static_cast<int>(blocks.size());
             blocks.push_back(
                 Block::heading("Comments (" + std::to_string(thread.counts.comments) + ")", 3));
             for (const auto &comment : thread.latest)
@@ -1440,6 +1445,26 @@ void Screen::update_page(const InputFrame &input, ui::Feedback &feedback)
         open_developer(author);
         feedback.play(audio::Cue::select);
     }
+    else if (comments_block_ >= 0 &&
+             (input.is_pressed(Action::jump_next) || input.is_pressed(Action::jump_prev)))
+    {
+        // R2 goes straight to the comments, however long the release notes are; R2 again, or
+        // L2, goes back to the top. Having scrolled there by hand counts as being there.
+        const float limit = article_.scroll_limit();
+        const float place = std::min(article_.block_offset(comments_block_), limit);
+        const bool there = at_comments_ || (place > 0.5f && article_.scroll() >= place - 1.0f);
+        if (there || input.is_pressed(Action::jump_prev))
+        {
+            article_.scroll_to(0.0f);
+            at_comments_ = false;
+        }
+        else
+        {
+            article_.scroll_to_block(comments_block_);
+            at_comments_ = true;
+        }
+        feedback.play(audio::Cue::select);
+    }
     else if (input.is_pressed(Action::touch) && !discussion_of(shown).empty())
     {
         // Like or comment: on GitHub, from a phone. The store only shows the way there.
@@ -1451,7 +1476,11 @@ void Screen::update_page(const InputFrame &input, ui::Feedback &feedback)
         feedback.play(audio::Cue::open);
     }
     else
+    {
         article_.handle(input, feedback);
+        if (article_.scroll() <= 0.5f)
+            at_comments_ = false; // back at the top by hand
+    }
 }
 
 bool Screen::open_developer(const std::string &author)
@@ -3305,13 +3334,19 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
         home[homes++] = {ui::Button::circle, "Hold to close"};
     // The page's row names the one thing Cross does for this app, when it can.
     const Offer state = focused() ? offer(*focused()) : Offer{};
-    ui::Hint detail[7];
+    ui::Hint detail[8];
     int details = 0;
     if (state.armed)
         detail[details++] = {ui::Button::cross, state.label.c_str()};
     if (state.uninstall && installer_ && guard_ && !state.busy)
         detail[details++] = {ui::Button::square, "Uninstall"};
-    detail[details++] = {ui::Button::dpad, "Scroll"};
+    // With comments on the page R2 jumps to them; the row then has no room to also say that
+    // the D-pad scrolls when Uninstall is on it.
+    const bool jump = details_ && comments_block_ >= 0;
+    if (!jump || details < 2)
+        detail[details++] = {ui::Button::dpad, "Scroll"};
+    if (jump)
+        detail[details++] = {ui::Button::r2, at_comments_ ? "Top" : "Comments"};
     if (focused() && !focused()->local_only)
         detail[details++] = {ui::Button::triangle, "Refresh"};
     if (focused() && !focused()->local_only && !focused()->author.empty())

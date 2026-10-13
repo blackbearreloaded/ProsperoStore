@@ -13,9 +13,9 @@ namespace hid
 {
 constexpr std::uint16_t kEnter = 0x28, kEscape = 0x29, kBackspace = 0x2a, kTab = 0x2b,
                         kSpace = 0x2c, kSlash = 0x38, kF1 = 0x3a, kF2 = 0x3b, kF3 = 0x3c,
-                        kF5 = 0x3e, kF6 = 0x3f, kF10 = 0x43, kPageUp = 0x4b, kDelete = 0x4c,
-                        kPageDown = 0x4e, kRight = 0x4f, kLeft = 0x50, kDown = 0x51, kUp = 0x52,
-                        kKeypadEnter = 0x58, kApplication = 0x65;
+                        kF5 = 0x3e, kF6 = 0x3f, kF7 = 0x40, kF10 = 0x43, kPageUp = 0x4b,
+                        kDelete = 0x4c, kPageDown = 0x4e, kRight = 0x4f, kLeft = 0x50, kDown = 0x51,
+                        kUp = 0x52, kKeypadEnter = 0x58, kApplication = 0x65;
 constexpr std::uint32_t kShift = 0x02 | 0x20; // left and right Shift in the modifier byte
 } // namespace hid
 
@@ -23,7 +23,7 @@ constexpr std::uint32_t kShift = 0x02 | 0x20; // left and right Shift in the mod
 // Escape or Backspace is Circle, Tab (Shift+Tab) and Page Down (Page Up) switch
 // sections like R1 (L1), / or F3 searches (Triangle), Delete or F2 is Square
 // (Downloads, uninstall), F10 or the Menu key is Options, F5 sorts (R3), F6 is the Touchpad
-// (like or comment).
+// (like or comment), F7 is R2 (to an app's comments and back).
 inline std::uint32_t keyboard_buttons(std::span<const std::uint16_t> keys, std::uint32_t modifiers)
 {
     using namespace hui::pad_bits;
@@ -78,6 +78,9 @@ inline std::uint32_t keyboard_buttons(std::span<const std::uint16_t> keys, std::
             break;
         case hid::kF6:
             buttons |= kTouchpad;
+            break;
+        case hid::kF7:
+            buttons |= kR2;
             break;
         default:
             break;
