@@ -89,9 +89,9 @@ struct Settings
     }
     bool verify_signatures = true;
     std::string news_seen; // the newest news item that was read
-    // Likes and comments from the apps' discussions on GitHub. Off until the player asks:
+    // Likes and comments from the apps' discussions on GitHub. On until the player says no:
     // while it is off the store reads nothing from that address and shows none of it.
-    bool show_comments = false;
+    bool show_comments = true;
 };
 std::string format_settings(const Settings &settings);
 Settings parse_settings(std::string_view text);

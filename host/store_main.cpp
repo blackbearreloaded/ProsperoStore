@@ -489,12 +489,12 @@ static void check_likes_and_comments()
 {
     using namespace store;
     const std::string base = "https://github.com/blackbearreloaded/ps5-homebrew-catalog/discussions/";
-    // Off unless the settings file says otherwise, and it survives that file.
-    assert(!parse_settings("").show_comments && !parse_settings("show_comments=yes\n").show_comments);
+    // On unless the settings file says otherwise, and switching it off survives that file.
+    assert(parse_settings("").show_comments && !parse_settings("show_comments=yes\n").show_comments);
     Settings chosen;
-    chosen.show_comments = true;
-    assert(parse_settings(format_settings(chosen)).show_comments);
-    assert(!parse_settings(format_settings(Settings{})).show_comments);
+    chosen.show_comments = false;
+    assert(!parse_settings(format_settings(chosen)).show_comments);
+    assert(parse_settings(format_settings(Settings{})).show_comments);
 
     App a, b, c, d;
     a.title_id = "PPSA99001";
@@ -539,6 +539,7 @@ static void check_likes_and_comments()
     {
         // Off: the counts are dropped on arrival, there are three orders and no code.
         Screen screen;
+        screen.set_settings(chosen);
         screen.set_catalog({a, b, c, d}, "test");
         screen.set_likes(likes);
         social::Thread thread;
@@ -555,7 +556,6 @@ static void check_likes_and_comments()
         assert(!screen.discussion_open() && screen.pending_discussion_link.empty());
     }
     Screen screen;
-    screen.set_settings(chosen);
     screen.set_catalog({a, b, c, d}, "test");
     // Discover: the "Most liked" shelf comes with the likes, under the one that was there, and
     // the focus stays on the tile it was on.

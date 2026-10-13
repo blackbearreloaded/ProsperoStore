@@ -169,8 +169,8 @@ about permissions under [Install](#install).
 Every app in the catalog has a discussion on GitHub, the same one its page on homebrew.page
 shows: the replies are the app's comments, and the upvotes of the discussion are its likes.
 
-They are off until you switch on **Settings → Show likes and comments**. While the switch is
-off the store asks GitHub for nothing and shows none of it. With it on:
+They are on from the first start; **Settings → Show likes and comments** switches them off.
+While the switch is off the store asks GitHub for nothing and shows none of it. With it on:
 
 - every tile shows the app's likes and comments, zero included;
 - Discover has a **Most liked** shelf, the ten apps with the most likes in order (it is there
