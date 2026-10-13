@@ -49,6 +49,9 @@ It is an alpha; the current version is the newest one on the
 - **The whole [homebrew.page](https://homebrew.page) catalog** - Discover shows one app big over
   shelves (New and updated, Apps, Games, Tools, Coming soon, On this console); each section has its
   own grid, with search by name or developer and sorting by name, release or update.
+- **Likes and comments** - switched on in **Settings**, every tile shows the app's likes and
+  comments, Discover gains a **Most liked** shelf, the grids a "Most liked" order, and an app's
+  page its latest comments; see [Likes and comments](#likes-and-comments).
 - **One-button installs** - Cross on an app's page downloads it, checks it against the signed
   catalog, unpacks it and puts it in place. A ring, four steps (Download, Verify, Unpack, Finish)
   and the time left show the progress; Circle cancels, and nothing changes until the end.
@@ -145,6 +148,7 @@ console test harness.
 | Downloads; hold to uninstall on an app's page | Square | Delete or F2 |
 | Settings | Options | F10 or the Menu key |
 | Sort | R3 | F5 |
+| Like or comment, on an app's page | Touchpad | F6 |
 
 ## Updating ProsperoStore
 
@@ -158,6 +162,31 @@ before 1.000.020 show a short notice at the top right instead of the question.
 Updating from inside the store is the easy way. To update by hand, replace the `PPSA99000` folder
 with the one from the new release; if the console then says it can't start the app, see the note
 about permissions under [Install](#install).
+
+## Likes and comments
+
+Every app in the catalog has a discussion on GitHub, the same one its page on homebrew.page
+shows: the replies are the app's comments, and the upvotes of the discussion are its likes.
+
+They are off until you switch on **Settings → Show likes and comments**. While the switch is
+off the store asks GitHub for nothing and shows none of it. With it on:
+
+- every tile shows the app's likes and comments, zero included;
+- Discover has a **Most liked** shelf, the ten apps with the most likes in order (it is there
+  when some app has a like), and each section's grid can be sorted by "Most liked";
+- an app's page shows its likes and comments among its facts, and a **Comments** block after the
+  release notes with the latest ten: who, when and what they wrote;
+- the Touchpad on an app's page shows a QR code for the app's discussion. Scan it with your
+  phone to like the app or to write a comment there. Both happen on GitHub and need a GitHub
+  account; the store itself never writes anything.
+
+The store reads two kinds of file for this, from one address only:
+`https://raw.githubusercontent.com/blackbearreloaded/ps5-homebrew-catalog/comments-data/`, the
+counts of every app when the catalog is refreshed and one app's comments when its page opens.
+These files are not part of the signed catalog and decide nothing about what is installed. What
+they hold is shown as plain text, cut to length, and the only address taken from them is the
+discussion's, which must be on github.com and is only ever shown as that code. When they can't
+be read there are simply no likes and comments, and the rest of the store works as before.
 
 ## Reporting a problem
 

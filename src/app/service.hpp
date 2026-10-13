@@ -5,7 +5,9 @@
 #include "catalog/client.hpp"
 #include "core/image.hpp"
 #include "install/transaction.hpp"
+#include "social/comments.hpp"
 #include "system/inventory.hpp"
+#include <atomic>
 #include <deque>
 #include <mutex>
 #include <optional>
@@ -29,11 +31,15 @@ struct Update
         news,         // the catalog's news feed, newest first
         job,          // a finished install, update or uninstall: entry.id, ok, message, detail
         locations,    // where apps can be installed on this console
+        likes,        // likes and comment counts of every app (social::Index)
+        comments,     // one app's latest comments: entry.id and thread
         error
     } kind = Kind::error;
     std::string detail;
     catalog::Snapshot snapshot;
     std::vector<catalog::News> news;
+    social::Index likes;
+    social::Thread thread;
     catalog::Entry entry;
     hui::Image image;
     hui::Image ambient;       // icon: the app's picture, made from it (make_ambient)
@@ -79,6 +85,16 @@ class Service
     void stop();
     bool take(std::vector<Update> &updates);
     bool request_detail(const std::string &id);
+    // "Show likes and comments". While it is off nothing is asked of the comments address;
+    // switched on, the counts are read then, and an app's comments when its page opens.
+    void show_comments(bool on)
+    {
+        // Each time it goes on the counts are read anew: the screen forgot them when it went off.
+        if (!on)
+            comments_ = false;
+        else if (!comments_.exchange(true))
+            likes_stale_ = true;
+    }
     bool request_icons(const std::vector<std::string> &ids);
     void report_frames(std::string report);
     // Never block: false means "ask again next frame" (or the queue is full).
@@ -153,5 +169,6 @@ class Service
     std::string frame_report_;
     std::string settings_;
     bool settings_pending_ = false;
+    std::atomic<bool> comments_{false}, likes_stale_{false};
 };
 } // namespace store

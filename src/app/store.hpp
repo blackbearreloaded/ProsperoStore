@@ -6,6 +6,7 @@
 
 #include "gfx/renderer.hpp"
 #include "catalog/catalog.hpp"
+#include "social/comments.hpp"
 #include "system/inventory.hpp"
 #include "ui/components/dialog.hpp"
 #include "ui/components/hold_button.hpp"
@@ -14,6 +15,7 @@
 #include "ui/motion.hpp"
 #include "gfx/draw_list.hpp"
 
+#include <map>
 #include <string>
 #include <vector>
 #include <optional>
@@ -46,6 +48,7 @@ struct App
     hui::gfx::Color accent = hui::gfx::Color::rgb(0x42358f);
     std::uint64_t size = 0;
     std::string added = {}; // when the catalog first listed it
+    bool extra = false;     // from the custom catalog: it has no likes or comments
 };
 
 // What the page asks the installer to do. The frame loop hands it to the
@@ -86,6 +89,9 @@ struct Settings
     }
     bool verify_signatures = true;
     std::string news_seen; // the newest news item that was read
+    // Likes and comments from the apps' discussions on GitHub. Off until the player asks:
+    // while it is off the store reads nothing from that address and shows none of it.
+    bool show_comments = false;
 };
 std::string format_settings(const Settings &settings);
 Settings parse_settings(std::string_view text);
@@ -120,6 +126,23 @@ class Screen
     // loop loads them all once and keeps them, so moving never waits.
     std::vector<std::string> artwork_backlog() const;
     void set_qr(std::string id, std::uint32_t texture, int width);
+    // Likes and comments (social/comments.hpp): the counts of every app, and the latest
+    // comments of one. Both are dropped unless "Show likes and comments" is on.
+    void set_likes(social::Index likes);
+    void set_comments(const std::string &id, social::Thread thread);
+    // "Like or comment" on an app's page (Touchpad): a code for its discussion on GitHub.
+    // The frame loop turns the pending address into the code.
+    std::string pending_discussion_link;
+    void set_discussion_qr(std::string link, std::uint32_t texture, int width)
+    {
+        discussion_qr_link_ = std::move(link);
+        discussion_qr_ = texture;
+        discussion_qr_width_ = width;
+    }
+    bool discussion_open() const
+    {
+        return discussion_;
+    }
     // A developer's page: every app by one developer, opened from an app's page (R3) and
     // left with Circle. The link is the developer's (catalog::developer_link); the frame
     // loop turns the pending one into a code.
@@ -270,7 +293,8 @@ class Screen
     {
         name,
         released,
-        updated
+        updated,
+        liked // offered once the likes are known
     };
     static constexpr int kSections = 7;
     // What the card and the banner print, fitted once per catalog, not per frame.
@@ -304,6 +328,8 @@ class Screen
     void order(const App &app, Order::Kind kind);
     bool in_section(const App &app, int section) const;
     void rebuild();
+    // rebuild(), with the focus kept on the app (and the shelf) it was on.
+    void rebuild_in_place();
     void refresh_detail();
     const App *focused() const;
     const App *page_app() const;
@@ -345,6 +371,24 @@ class Screen
     std::string time_left() const;
     void draw_action_box(const hui::ui::Fonts &fonts, std::uint32_t glass, const App &app,
                          float content);
+    // Likes and comments are shown: the setting is on and the counts have arrived.
+    bool social_shown() const
+    {
+        return settings_.show_comments && likes_known_;
+    }
+    // An app's counts while they are shown (none listed is zero), else null.
+    const social::Counts *counts_of(const App &app) const;
+    std::string discussion_of(const App &app) const;
+    void forget_social();
+    void draw_discussion(const hui::ui::Fonts &fonts, std::uint32_t glass);
+    social::Index likes_;
+    bool likes_known_ = false;
+    std::map<std::string, social::Thread> threads_;
+    bool discussion_ = false;
+    hui::tween::Spring discussion_value_;
+    std::string discussion_link_, discussion_name_, discussion_qr_link_;
+    std::uint32_t discussion_qr_ = 0;
+    int discussion_qr_width_ = 0;
 
     hui::ui::Theme theme_;
     hui::ui::TextView article_;
@@ -455,6 +499,7 @@ class Screen
     {
         std::string title;
         int start = 0, count = 0, pos = 0;
+        bool ranked = false; // "Most liked": each tile says its place
         hui::ui::Scroller scroll;
     };
     std::vector<Shelf> shelves_;

@@ -9,7 +9,10 @@
 #include <cassert>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <mutex>
 #include <set>
+#include <sstream>
 #include <thread>
 
 using namespace std::chrono_literals;
@@ -17,6 +20,14 @@ namespace
 {
 std::atomic<bool> refresh_ready{false};
 std::atomic<unsigned> downloads{0};
+// Every request made of the likes and comments address, in order.
+std::mutex comment_guard;
+std::vector<std::string> comment_requests;
+std::vector<std::string> asked_for_comments()
+{
+    std::lock_guard lock(comment_guard);
+    return comment_requests;
+}
 const unsigned char png[] = {
     137, 80, 78, 71, 13, 10, 26,  10,  0,   0,   0, 13, 73, 72, 68, 82, 0,  0,  0,   1,   0,  0,  0,
     1,   8,  6,  0,  0,  0,  31,  21,  196, 137, 0, 0,  0,  11, 73, 68, 65, 84, 120, 156, 99, 96, 0,
@@ -82,6 +93,12 @@ bool Client::refresh(Snapshot &out, net::Control &control, std::string &)
 bool Client::detail(const Snapshot &, const std::string &id, Entry &entry, net::Control &,
                     std::string &error)
 {
+    if (id == "PPSA99008")
+    {
+        entry = fixture().entries[8];
+        entry.page = "https://homebrew.page/app/PPSA99008/";
+        return true;
+    }
     if (id != "PPSA99000")
     {
         error = "offline";
@@ -104,9 +121,33 @@ void Control::cancel()
 {
     cancelled = true;
 }
-Response fetch(const std::string &url, Purpose, std::size_t, std::string &body, Control &,
+Response fetch(const std::string &url, Purpose purpose, std::size_t, std::string &body, Control &,
                const std::string &)
 {
+    if (purpose == Purpose::comments || url.starts_with(store::social::kBase))
+    {
+        // The comments files, from the fixtures; an app without one answers 404.
+        assert(purpose == Purpose::comments && store::social::data_url(url));
+        {
+            std::lock_guard lock(comment_guard);
+            comment_requests.push_back(url);
+        }
+        Response answer;
+        std::ifstream file(std::string(STORE_TEST_FIXTURES) + "/" +
+                               url.substr(store::social::kBase.size()),
+                           std::ios::binary);
+        if (!file)
+        {
+            answer.status = 404;
+            answer.error = "The server refused the request";
+            return answer;
+        }
+        std::ostringstream bytes;
+        bytes << file.rdbuf();
+        body = bytes.str();
+        answer.status = 200;
+        return answer;
+    }
     if (url == "https://homebrew.page/api/v1/apps/PPSA99000.json")
     {
         // The store's own listing, one release ahead of the running build.
@@ -286,6 +327,48 @@ int main()
     assert(service.request_detail("PPSA99001"));
     const auto failure = next(service, store::Update::Kind::error);
     assert(failure.entry.id == "PPSA99001" && failure.message == "offline");
+    // Likes and comments. The setting is off until now: through the catalog, the icons and
+    // three app pages, nothing was asked of their address.
+    assert(asked_for_comments().empty());
+    service.show_comments(true);
+    const auto likes = next(service, store::Update::Kind::likes);
+    assert(likes.likes.at("PPSA99008").likes == 41 && likes.likes.at("PPSA99008").comments == 37);
+    assert(asked_for_comments() == std::vector<std::string>{store::social::index_url()});
+    // An app's page asks for that app's comments, after its verified details.
+    assert(service.request_detail("PPSA99008"));
+    const auto thread = next(service, store::Update::Kind::comments);
+    assert(thread.entry.id == "PPSA99008" && thread.thread.counts.comments == 37);
+    assert(thread.thread.latest.size() == store::social::kComments);
+    assert(asked_for_comments().back() == store::social::thread_url("PPSA99008"));
+    // An app without a file, and one whose details could not be verified: no comments, no error.
+    assert(service.request_detail("PPSA99000"));
+    assert(next(service, store::Update::Kind::detail).entry.id == "PPSA99000");
+    assert(service.request_detail("PPSA99001"));
+    assert(next(service, store::Update::Kind::error).entry.id == "PPSA99001");
+    std::this_thread::sleep_for(300ms);
+    {
+        std::vector<store::Update> rest;
+        service.take(rest);
+        for (const auto &update : rest)
+            assert(update.kind != store::Update::Kind::comments &&
+                   update.kind != store::Update::Kind::error);
+        const auto asked = asked_for_comments();
+        assert(asked.size() == 3 && asked.back() == store::social::thread_url("PPSA99000"));
+    }
+    // Switched off again: the next page asks for nothing.
+    service.show_comments(false);
+    assert(service.request_detail("PPSA99008"));
+    assert(next(service, store::Update::Kind::detail).entry.id == "PPSA99008");
+    std::this_thread::sleep_for(300ms);
+    assert(asked_for_comments().size() == 3);
+    // On again, however quickly: the counts are read anew.
+    service.show_comments(true);
+    service.show_comments(false);
+    service.show_comments(true);
+    assert(next(service, store::Update::Kind::likes).likes.contains("PPSA99008"));
+    assert(asked_for_comments().size() == 4 &&
+           asked_for_comments().back() == store::social::index_url());
+    service.show_comments(false);
     assert(service.request_icons(ids));
     std::this_thread::sleep_for(1500ms);
     const auto before = std::chrono::steady_clock::now();

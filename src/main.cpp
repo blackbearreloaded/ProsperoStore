@@ -273,6 +273,7 @@ int main()
         save::read_file(settings_file, &saved, 4096);
         screen.set_settings(store::parse_settings(saved));
         service.check_updates = screen.settings().check_updates;
+        service.show_comments(screen.settings().show_comments);
         // The custom catalog only when it is switched on; the official one is always signed.
         const auto &chosen = screen.settings();
         const bool custom = chosen.custom_active();
@@ -459,6 +460,7 @@ int main()
                     apps.back().available_version = entry.content_version;
                     apps.back().size = entry.size;
                     apps.back().added = entry.added;
+                    apps.back().extra = entry.extra;
                 }
 #ifdef STORE_DEBUG_TRACE
                 store::diag::trace("catalog: %zu apps, %s, %s", apps.size(),
@@ -521,6 +523,10 @@ int main()
             }
             else if (update.kind == store::Update::Kind::locations)
                 screen.set_locations(std::move(update.locations));
+            else if (update.kind == store::Update::Kind::likes)
+                screen.set_likes(std::move(update.likes));
+            else if (update.kind == store::Update::Kind::comments)
+                screen.set_comments(update.entry.id, std::move(update.thread));
             else if (update.kind == store::Update::Kind::icon)
             {
                 const auto listed = hashes.find(update.entry.id);
@@ -598,6 +604,22 @@ int main()
                 screen.set_developer_qr(link, developer_code);
             }
         }
+        if (!screen.pending_discussion_link.empty())
+        {
+            // "Like or comment": one code at a time, for the discussion that was asked for.
+            static std::uint32_t discussion_code = 0;
+            const std::string link = std::move(screen.pending_discussion_link);
+            screen.pending_discussion_link.clear();
+            Image code;
+            if (store::social::discussion_url(link) && hui::encode_qr(link, code))
+            {
+                if (discussion_code)
+                    glDeleteTextures(1, &discussion_code);
+                discussion_code =
+                    renderer.batch().create_texture(code.width, code.height, code.rgba.data());
+                screen.set_discussion_qr(link, discussion_code, code.width);
+            }
+        }
         // The page's request goes to the installer; one refused by a busy lock is asked again.
         if (auto &order = screen.pending_order; order.kind != store::Order::Kind::none)
         {
@@ -620,6 +642,7 @@ int main()
         if (screen.settings_changed &&
             service.save_settings(store::format_settings(screen.settings())))
             screen.settings_changed = false;
+        service.show_comments(screen.settings().show_comments);
         if (store::JobView view; service.job(view))
             store::diag::hold_log(!view.id.empty());
         if (store::JobView view; service.job(view))

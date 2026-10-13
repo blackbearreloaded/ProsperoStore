@@ -329,6 +329,7 @@ static void check_keyboard_keys()
     assert(press({store::hid::kPageDown}) == kR1 && press({store::hid::kPageUp}) == kL1);
     assert(press({store::hid::kSlash}) == kTriangle && press({store::hid::kDelete}) == kSquare);
     assert(press({store::hid::kF10}) == kOptions && press({store::hid::kF5}) == kR3);
+    assert(press({store::hid::kF6}) == kTouchpad);
     assert(press({store::hid::kDown, store::hid::kEnter}) == (kDown | kCross));
     assert(press({0x04 /* A */}) == 0 && press({}) == 0);
 }
@@ -416,7 +417,7 @@ static void check_catalog_settings()
     right.nav = hui::Direction::right;
     confirm.pressed = hui::action_bit(hui::Action::confirm);
     back.pressed = hui::action_bit(hui::Action::back);
-    for (int i = 0; i < 7; ++i)
+    for (int i = 0; i < 8; ++i)
         screen.update(down, 0.016f, feedback);
     screen.update(confirm, 0.016f, feedback); // Development options: Official catalog.
     // The official catalog can't go while no custom one is in use.
@@ -482,9 +483,156 @@ static void check_catalog_settings()
     assert(!parse_settings("use_official=1\nuse_custom=1\n").use_custom);
 }
 
+// Likes and comments: nothing of them while the setting is off, and with it on the counts, the
+// "Most liked" order and shelf, the comments of the open page and the code for its discussion.
+static void check_likes_and_comments()
+{
+    using namespace store;
+    const std::string base = "https://github.com/blackbearreloaded/ps5-homebrew-catalog/discussions/";
+    // Off unless the settings file says otherwise, and it survives that file.
+    assert(!parse_settings("").show_comments && !parse_settings("show_comments=yes\n").show_comments);
+    Settings chosen;
+    chosen.show_comments = true;
+    assert(parse_settings(format_settings(chosen)).show_comments);
+    assert(!parse_settings(format_settings(Settings{})).show_comments);
+
+    App a, b, c, d;
+    a.title_id = "PPSA99001";
+    a.name = "Zulu";
+    b.title_id = "PPSA99002";
+    b.name = "alpha";
+    c.title_id = "PPSA99003";
+    c.name = "Mike";
+    d.title_id = "PPSA99004";
+    d.name = "bravo";
+    a.kind = b.kind = c.kind = d.kind = "app";
+    a.updated = b.updated = c.updated = d.updated = "2026-10-01T00:00:00Z";
+    const social::Index likes = {{a.title_id, {7, 2, base + "1"}},
+                                 {b.title_id, {3, 0, base + "2"}},
+                                 {c.title_id, {7, 1, "https://evil.example/discussions/3"}}};
+    hui::ui::Feedback quiet;
+    hui::InputFrame next, sort, down, confirm, back, touch;
+    next.pressed = hui::action_bit(hui::Action::page_next);
+    sort.pressed = hui::action_bit(hui::Action::r3);
+    down.nav = hui::Direction::down;
+    confirm.pressed = hui::action_bit(hui::Action::confirm);
+    back.pressed = hui::action_bit(hui::Action::back);
+    touch.pressed = hui::action_bit(hui::Action::touch);
+    const auto order = [&](Screen &screen)
+    {
+        // The Apps grid from its first tile to its last.
+        std::vector<std::string> ids;
+        for (int k = 0; k < 4; ++k)
+        {
+            ids.push_back(screen.artwork().front());
+            hui::InputFrame right;
+            right.nav = hui::Direction::right;
+            screen.update(right, 1.0f / 60.0f, quiet);
+        }
+        hui::InputFrame left;
+        left.nav = hui::Direction::left;
+        for (int k = 0; k < 4; ++k)
+            screen.update(left, 1.0f / 60.0f, quiet);
+        return ids;
+    };
+    using Ids = std::vector<std::string>;
+    {
+        // Off: the counts are dropped on arrival, there are three orders and no code.
+        Screen screen;
+        screen.set_catalog({a, b, c, d}, "test");
+        screen.set_likes(likes);
+        social::Thread thread;
+        thread.counts = likes.at(a.title_id);
+        screen.set_comments(a.title_id, thread);
+        screen.update(next, 1.0f / 60.0f, quiet);
+        const Ids by_name = {b.title_id, d.title_id, c.title_id, a.title_id};
+        assert(order(screen) == by_name);
+        for (int k = 0; k < 3; ++k)
+            screen.update(sort, 1.0f / 60.0f, quiet);
+        assert(order(screen) == by_name); // round the three orders, back to names
+        assert(screen.open_app(a.title_id));
+        screen.update(touch, 1.0f / 60.0f, quiet);
+        assert(!screen.discussion_open() && screen.pending_discussion_link.empty());
+    }
+    Screen screen;
+    screen.set_settings(chosen);
+    screen.set_catalog({a, b, c, d}, "test");
+    // Discover: the "Most liked" shelf comes with the likes, under the one that was there, and
+    // the focus stays on the tile it was on.
+    const auto focused = screen.artwork().front();
+    screen.set_likes(likes);
+    assert(screen.artwork().front() == focused);
+    screen.update(down, 1.0f / 60.0f, quiet);
+    assert(screen.artwork().front() == c.title_id); // 7 likes, "Mike" before "Zulu"
+    hui::InputFrame right;
+    right.nav = hui::Direction::right;
+    screen.update(right, 1.0f / 60.0f, quiet);
+    assert(screen.artwork().front() == a.title_id);
+    screen.update(right, 1.0f / 60.0f, quiet);
+    assert(screen.artwork().front() == b.title_id); // 3 likes
+    screen.update(right, 1.0f / 60.0f, quiet);
+    assert(screen.artwork().front() == b.title_id); // the shelf ends: nobody liked "bravo"
+    // The grids gain a fourth order: most liked first, ties and the unliked by name.
+    screen.update(next, 1.0f / 60.0f, quiet);
+    for (int k = 0; k < 3; ++k)
+        screen.update(sort, 1.0f / 60.0f, quiet);
+    assert(order(screen) == (Ids{c.title_id, a.title_id, b.title_id, d.title_id}));
+    screen.update(sort, 1.0f / 60.0f, quiet);
+    assert(order(screen) == (Ids{b.title_id, d.title_id, c.title_id, a.title_id}));
+    // A page: Touchpad asks for the code of its discussion, and any button closes it again
+    // without leaving the page.
+    assert(screen.open_app(a.title_id));
+    screen.pending_detail.clear();
+    screen.update(touch, 1.0f / 60.0f, quiet);
+    assert(screen.discussion_open() && screen.pending_discussion_link == base + "1");
+    screen.pending_discussion_link.clear();
+    screen.set_discussion_qr(base + "1", 1, 180);
+    screen.update(back, 1.0f / 60.0f, quiet);
+    assert(!screen.discussion_open() && screen.page_open());
+    screen.update(touch, 1.0f / 60.0f, quiet);
+    assert(screen.discussion_open() && screen.pending_discussion_link.empty()); // made once
+    screen.update(touch, 1.0f / 60.0f, quiet);
+    assert(!screen.discussion_open());
+    // The app's own file is the newer word on its address, and one that is not GitHub's is
+    // never offered.
+    social::Thread thread;
+    thread.counts = {9, 1, base + "11"};
+    thread.latest = {{"someone", "2026-10-12", "Plain words."}};
+    screen.set_comments(a.title_id, thread);
+    screen.update(touch, 1.0f / 60.0f, quiet);
+    assert(screen.pending_discussion_link == base + "11");
+    screen.pending_discussion_link.clear();
+    screen.update(back, 1.0f / 60.0f, quiet);
+    screen.update(back, 1.0f / 60.0f, quiet);
+    assert(!screen.page_open());
+    assert(screen.open_app(c.title_id));
+    screen.pending_detail.clear();
+    screen.update(touch, 1.0f / 60.0f, quiet);
+    assert(!screen.discussion_open() && screen.pending_discussion_link.empty());
+    screen.update(back, 1.0f / 60.0f, quiet);
+    // Settings: the sixth row switches it. Off forgets everything at once.
+    screen.open_panel(1);
+    for (int k = 0; k < 5; ++k)
+        screen.update(down, 0.016f, quiet);
+    screen.settings_changed = false;
+    screen.update(confirm, 0.016f, quiet);
+    assert(!screen.settings().show_comments && screen.settings_changed);
+    screen.update(back, 0.016f, quiet);
+    screen.update(next, 1.0f / 60.0f, quiet);
+    for (int k = 0; k < 3; ++k)
+        screen.update(sort, 1.0f / 60.0f, quiet);
+    assert(order(screen) == (Ids{b.title_id, d.title_id, c.title_id, a.title_id}));
+    screen.open_panel(1);
+    for (int k = 0; k < 5; ++k)
+        screen.update(down, 0.016f, quiet);
+    screen.update(confirm, 0.016f, quiet);
+    assert(screen.settings().show_comments);
+}
+
 int main(int argc, char **argv)
 {
     check_artwork_requests();
+    check_likes_and_comments();
     check_search_and_sort();
     check_news_and_new_apps();
     check_wrapping_and_closing();
@@ -532,7 +680,7 @@ int main(int argc, char **argv)
             down.nav = hui::Direction::down;
             if (std::string(argv[3]) == "catalog-settings")
             {
-                for (int i = 0; i < 7; ++i)
+                for (int i = 0; i < 8; ++i)
                     screen.update(down, 0.016f, quiet);
                 hui::InputFrame confirm;
                 confirm.pressed = hui::action_bit(hui::Action::confirm);
@@ -551,6 +699,7 @@ int main(int argc, char **argv)
                 screen.set_coming_soon_art(textures.back());
             }
         }
+        std::vector<store::catalog::Entry> snapshot_entries; // the catalog shown, if any
         if (argc >= 4 && std::string(argv[3]) != "settings" &&
             std::string(argv[3]) != "catalog-settings")
         {
@@ -562,6 +711,7 @@ int main(int argc, char **argv)
                 std::fprintf(stderr, "%s\n", error.c_str());
                 return 8;
             }
+            snapshot_entries = snapshot.entries;
             std::vector<store::App> apps;
             for (const auto &entry : snapshot.entries)
             {
@@ -571,6 +721,7 @@ int main(int argc, char **argv)
                 apps.back().available_version = entry.content_version;
                 apps.back().size = entry.size;
                 apps.back().added = entry.added;
+                apps.back().extra = entry.extra;
                 // A preview of the shelves with a catalog that doesn't date its apps yet.
                 if (argc == 5 && std::string(argv[4]) == "whats-new" && entry.added.empty())
                     apps.back().added = entry.released;
@@ -691,6 +842,104 @@ int main(int argc, char **argv)
                     screen.set_activity({id, phase, total / 5, total, {"PPSA99420"}});
                     settle(60);
                     screen.set_activity({id, phase, total * 43 / 100, total, {"PPSA99420"}});
+                }
+            }
+            else if (mode.starts_with("likes-") || mode.starts_with("comments-"))
+            {
+                // Likes and comments from files in the folder STORE_COMMENTS names (the
+                // tests' fixtures have the shape): the setting on, the counts in, and then
+                // "likes-home" the shelf, "likes-grid" the Apps grid in that order,
+                // "likes-settings" the switch, "comments-<TITLEID>" that app's page and
+                // "comments-code-<TITLEID>" the code for its discussion.
+                const char *folder = std::getenv("STORE_COMMENTS");
+                if (!folder)
+                    return 9;
+                auto chosen = screen.settings();
+                chosen.show_comments = true;
+                screen.set_settings(chosen);
+                std::string body;
+                store::social::Index likes;
+                if (!hui::save::read_file(std::string(folder) + "/v1/index.json", &body) ||
+                    !store::social::parse_index(body, likes))
+                    return 9;
+                screen.set_likes(likes);
+                if (mode == "likes-home")
+                {
+                    // Down to the shelf whose first two tiles are the two most liked apps,
+                    // and along it to the second.
+                    std::vector<store::social::Ranked> ranked;
+                    for (const auto &[id, counts] : likes)
+                        for (const auto &entry : snapshot_entries)
+                            if (entry.id == id && entry.status != "coming_soon")
+                                ranked.push_back({id, entry.name, counts.likes});
+                    for (auto &app : ranked)
+                        for (auto &c : app.name)
+                            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+                    const auto most = store::social::most_liked(ranked);
+                    assert(most.size() >= 2);
+                    for (int i = 0; i < 6; ++i)
+                    {
+                        screen.update(down, 1.0f / 60.0f, feedback);
+                        settle(20);
+                        if (screen.artwork().front() != most[0])
+                            continue;
+                        screen.update(right, 1.0f / 60.0f, feedback);
+                        if (screen.artwork().front() == most[1])
+                            break;
+                        hui::InputFrame left;
+                        left.nav = hui::Direction::left;
+                        screen.update(left, 1.0f / 60.0f, feedback);
+                    }
+                }
+                else if (mode == "likes-grid")
+                {
+                    hui::InputFrame section, sort;
+                    section.pressed = hui::action_bit(hui::Action::page_next);
+                    sort.pressed = hui::action_bit(hui::Action::r3);
+                    screen.update(section, 1.0f / 60.0f, feedback);
+                    for (int i = 0; i < 3; ++i)
+                        screen.update(sort, 1.0f / 60.0f, feedback);
+                }
+                else if (mode == "likes-settings")
+                {
+                    screen.open_panel(1);
+                    for (int i = 0; i < 5; ++i)
+                        screen.update(down, 1.0f / 60.0f, feedback);
+                }
+                else
+                {
+                    const bool code = mode.starts_with("comments-code-");
+                    const std::string id = mode.substr(code ? 14 : 9);
+                    screen.set_installer(true, true, "", "/data/homebrew");
+                    screen.set_running({}, true);
+                    screen.set_locations({{"/data/homebrew", 548ull << 30}});
+                    if (!screen.open_app(id))
+                        return 9;
+                    screen.pending_detail.clear();
+                    hui::Image qr;
+                    assert(hui::encode_qr("https://homebrew.page/app/" + id + "/", qr));
+                    textures.push_back(
+                        renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data()));
+                    screen.set_qr(id, textures.back(), qr.width);
+                    store::social::Thread thread;
+                    if (hui::save::read_file(std::string(folder) + "/v1/apps/" + id + ".json",
+                                             &body) &&
+                        store::social::parse_thread(body, id, thread))
+                        screen.set_comments(id, thread);
+                    settle(60);
+                    if (code)
+                    {
+                        hui::InputFrame touch;
+                        touch.pressed = hui::action_bit(hui::Action::touch);
+                        screen.update(touch, 1.0f / 60.0f, feedback);
+                        const std::string link = screen.pending_discussion_link;
+                        assert(store::social::discussion_url(link) && hui::encode_qr(link, qr));
+                        screen.pending_discussion_link.clear();
+                        textures.push_back(
+                            renderer.batch().create_texture(qr.width, qr.height, qr.rgba.data()));
+                        screen.set_discussion_qr(link, textures.back(), qr.width);
+                        std::printf("Discussion code: %s\n", link.c_str());
+                    }
                 }
             }
             else if (mode == "reel-install")
@@ -1076,6 +1325,19 @@ int main(int argc, char **argv)
                 screen.update(hold, 1.0f / 60.0f, feedback);
         }
         screen.draw(renderer, fonts.refs);
+        if (const char *steps = std::getenv("STORE_SCROLL"); steps && argc == 5)
+        {
+            // Down the open page's article by this many presses, once it has been laid out.
+            hui::InputFrame scroll;
+            scroll.nav = hui::Direction::down;
+            for (int i = 0; i < std::atoi(steps); ++i)
+            {
+                screen.update(scroll, 1.0f / 60.0f, feedback);
+                for (int frame = 0; frame < 30; ++frame)
+                    screen.update({}, 1.0f / 60.0f, feedback);
+            }
+            screen.draw(renderer, fonts.refs);
+        }
         if (argc == 5 && std::string(argv[4]) == "detail-end")
         {
             hui::InputFrame scroll;
