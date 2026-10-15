@@ -108,6 +108,14 @@ It is an alpha; the current version is the newest one on the
 >   `0777` does it for every upload.
 > - Updates done from inside the store, and apps the store installs, are set to `777` for you.
 
+> [!IMPORTANT]
+> **Set the console's date and time correctly.** The store reaches the catalog and downloads apps
+> over HTTPS, and a secure connection is refused when the console's clock is far off (the site's
+> certificate then looks expired or not yet valid). With a wrong date the store stays offline,
+> shows no apps or fails every download. Check **Settings > System > Date and Time** on the PS5;
+> a console kept offline often has the wrong date. The store's debug log shows the clock it saw
+> (`console clock:`).
+
 The store keeps its own data in `/data/prosperostore` (settings, cache, install records and
 logs), outside the app's folder, so updates keep it.
 
