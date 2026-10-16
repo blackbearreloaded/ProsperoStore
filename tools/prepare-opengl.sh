@@ -19,7 +19,8 @@ if [[ -n ${PS5_OPENGL_PREFIX:-} ]]; then
         exit 2
     }
 else
-    prefix=$(bash "$root/tools/fetch-opengl-sdk.sh")
+    # A first download can print more than the path; the path is the last line.
+    prefix=$(bash "$root/tools/fetch-opengl-sdk.sh" | tail -n 1)
 fi
 
 for required in include/EGL/egl.h include/GL/glcorearb.h include/ps5_opengl_display.h \

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# ps5-native-app-boilerplate - GNU sha256sum on macOS, where only shasum exists.
+# Copyright (C) 2026 BlackBearReloaded
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Put on PATH by the Makefile on macOS only; the scripts call sha256sum, --check and --strict.
+exec shasum -a 256 "$@"

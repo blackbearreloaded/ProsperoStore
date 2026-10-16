@@ -160,17 +160,19 @@
       "tools/prepare-assets.ps1": "a9b1ec50ed16d1839e2fccbddba0d1fd4f0950171e9fadf4995b12e0b0df8d81",
       "tools/prepare-assets.sh": "05e36d98aec07888bc033a42b036f08b69ba1bde0cc9b66e598b4c1bb6daccad",
       "tools/rebuild-libc.ps1": "8720ec24d8e92f19b60c8590ca5bf4d652cb6ee4669139d0903a0d3f30f04b3e",
-      "tools/rebuild-libc.sh": "125cafc07be36699db9f69933f91f59dc41bb597c591105051cbf402e02150d5",
+      "tools/rebuild-libc.sh": "b86daf0d293467e798b7c2669a4e681f1db27706cdd314a7f7a14a9ca7555761",
       "tools/run_clang_format.sh": "e04d8da16f9ecc73157643555fbb02625d2aab5d7c576003977f61813ee7e699",
       "tools/run_clang_tidy.sh": "923812229bbced1dd3ce449bac102a76e12cc39d0035fa5a05a4e80d1f7ba658",
       "tools/setup-native-dependencies.ps1": "44ef5aa711f4e8868b28de606221af52973570af0f059d87dde507b34867bdc7",
-      "tools/setup-native-dependencies.sh": "284526297f0a53bfc99f4b8019234c21bf2c2aaa4b474e3fb5fec87bf1c1ddb7",
+      "tools/setup-native-dependencies.sh": "5923241ffb7f75d2f39a8f391b87461a327dc51d3dd1a335b390caa849337b3f",
       "tools/setup-pacbrew-dependencies.sh": "af54820b1448e6bcd913214c7ad4c08e83ab011b40391a4289ae8ea9f8de7bb5",
       "tools/setup-test-dependencies.sh": "b9b7c5e7b9690ef4ddc3ed14592865f61edd902a0c4e0e10fb61a515d8bf1528",
       "tools/test-pacbrew-curl.sh": "29c64e5a34d6a20d6ff5fab4a29b8059d399bd288e6c22778b4ab396d37f692e",
       "tools/validate-assets.sh": "d432d1479b959363c274db64015cd7b321e7f3ed699d9deb25fd97d473bb8d9e"
     },
     "local_changes": {
+      "tools/rebuild-libc.sh": "macOS host checks from @JMUtechnologies (ProsperoStore PR 30), as in boilerplate PR 13.",
+      "tools/setup-native-dependencies.sh": "macOS host checks from @JMUtechnologies (ProsperoStore PR 30), as in boilerplate PR 13.",
       "examples/sandbox-elevation/elevation.hpp": "Diagnostics only: elevation::step() and step_code() report the last step request() reached. Store-only until the boilerplate kit takes it.",
       "examples/sandbox-elevation/src/elevation.cpp": "Diagnostics only: elevation::step() and step_code() report the last step request() reached. Store-only until the boilerplate kit takes it.",
       "tools/build-lapy-helper.py": "Lapy helper from blackbearreloaded/PS5-Lapy-JB-Daemon 57fcc19 (our donor-release fix, upstream PR 48, upstream PR 49 for the 32-byte credential attributes, and the guarded target lifetime of upstream PR 50) built with payload SDK v0.42, which knows firmware 13.40 to 13.60. Store-only until upstream merges them.",
@@ -517,7 +519,7 @@
       "third_party/stb/stb_image_write.h": "cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05",
       "third_party/stb/stb_truetype.h": "ecd30b05e0dd4fea3a13c26810dd9e1992dc379049482c393d5a19e6b5090aab",
       "tools/fetch-opengl-sdk.sh": "1052f77890ad5ee48cef24c0515ce1c99cc789e8b696efd228a1d462b65a0b16",
-      "tools/prepare-opengl.sh": "ddf2c8680418ef525d0170a1e154d28b7b186178ff18f212ec9bc267400094db",
+      "tools/prepare-opengl.sh": "213abeaa87839369754dce5a5df37bbcf5b83404adacc7757975fbf613dca8c4",
       "src/core/image.cpp": "d34bde4d2d46df23d9f40598dce61aeb6f147ecedf77e9a6457b6a5eaa6f4af4",
       "src/core/image.hpp": "ffb5586197d5bccb8b77c6d005c621c8aa7f8386d29395cae842924fc0d4bd91",
       "third_party/stb/IMAGE_SOURCE.json": "7ee4888fdf8b9ff210b595ec44f31230f4b2261c5f40dda3f7b47a9016868a5a",
@@ -533,6 +535,7 @@
       "src/core/held_step.hpp": "0ef176e4fb308a184c74fff82364528fa334f43964073af0d93abe46bc0a6503"
     },
     "local_changes": {
+      "tools/prepare-opengl.sh": "Keeps only the last line fetch-opengl-sdk.sh prints, the SDK path; from @JMUtechnologies (ProsperoStore PR 30).",
       "assets/fonts/dejavu-sans-mono.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
       "assets/fonts/inter-regular.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",
       "assets/fonts/inter-semibold.huifont": "Baked with the kit's font baker and its `2048 european` glyph set (accented Latin, Greek, Cyrillic) instead of the basic set, because the store shows names it did not write.",

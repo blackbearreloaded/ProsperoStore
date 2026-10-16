@@ -44,7 +44,7 @@ signed_hash=$(sha256sum "$work/libc-a.prx" | cut -d ' ' -f 1)
     echo "signed runtime hash mismatch: $signed_hash" >&2
     exit 2
 }
-[[ $(stat -c %s "$work/libc-a.prx") == 1284674 ]] || {
+[[ $(wc -c <"$work/libc-a.prx" | tr -d ' ') == 1284674 ]] || {
     echo "signed runtime size mismatch" >&2
     exit 2
 }

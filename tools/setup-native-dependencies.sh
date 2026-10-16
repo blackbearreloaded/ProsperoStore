@@ -79,7 +79,12 @@ if [[ -z $zlib_library || ! -f $zlib_root/usr/include/zlib.h ||
     (
         cd "$zlib_source"
         CC="$compiler" AR="$archiver" RANLIB="$ranlib" ./configure --static --prefix=/usr
-        make -j "$jobs" CC="$compiler" AR="$archiver" RANLIB="$ranlib"
+        # zlib's configure picks libtool-style archive flags on macOS; llvm-ar wants rcs.
+        if [[ $(uname -s) == Darwin && $(basename "$archiver") != libtool ]]; then
+            make -j "$jobs" CC="$compiler" AR="$archiver" ARFLAGS=rcs RANLIB="$ranlib"
+        else
+            make -j "$jobs" CC="$compiler" AR="$archiver" RANLIB="$ranlib"
+        fi
         make DESTDIR="$zlib_root" install
     ) >"$zlib_directory/build.log"
     printf '%s\n' "$zlib_version" >"$zlib_stamp"

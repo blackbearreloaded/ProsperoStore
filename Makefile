@@ -38,7 +38,13 @@ HOST_TEST_CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
 	-ffunction-sections -fdata-sections
 HOST_TEST_CXXFLAGS ?= -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror \
 	-ffunction-sections -fdata-sections
+# macOS (host checks only): Apple's linker has no --gc-sections, and sha256sum is shasum.
+ifeq ($(shell uname -s),Darwin)
+HOST_TEST_LDFLAGS ?=
+export PATH := $(CURDIR)/tools/macos:$(PATH)
+else
 HOST_TEST_LDFLAGS ?= -Wl,--gc-sections
+endif
 GTEST_ARGS ?=
 BUILD_JOBS ?= $(shell nproc 2>/dev/null || echo 2)
 USE_CCACHE ?= 1
