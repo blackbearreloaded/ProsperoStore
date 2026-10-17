@@ -402,6 +402,12 @@ bool Screen::in_section(const App &app, int section) const
     }
 }
 
+// When the app's listed release came out; the record's last change when the catalog doesn't say.
+static const std::string &release_day(const App &app)
+{
+    return app.released.empty() ? app.updated : app.released;
+}
+
 void Screen::rebuild()
 {
     visible_.clear();
@@ -452,8 +458,8 @@ void Screen::rebuild()
     {
         const auto all = visible_;
         visible_.clear();
-        // order: 0 as listed, 1 the twelve updated last, 2 the twelve listed last, 3 the ten
-        // with the most likes (ties by name).
+        // order: 0 as listed, 1 the twelve with the newest releases, 2 the twelve listed last, 3
+        // the ten with the most likes (ties by name).
         const auto shelf = [&](std::string title, auto keep, int order)
         {
             std::vector<std::size_t> members;
@@ -475,9 +481,11 @@ void Screen::rebuild()
             else if (order)
             {
                 std::stable_sort(members.begin(), members.end(),
-                                 [&](auto a, auto b) {
-                                     return order == 2 ? apps_[a].added > apps_[b].added
-                                                       : apps_[a].updated > apps_[b].updated;
+                                 [&](auto a, auto b)
+                                 {
+                                     return order == 2
+                                                ? apps_[a].added > apps_[b].added
+                                                : release_day(apps_[a]) > release_day(apps_[b]);
                                  });
                 if (members.size() > 12)
                     members.resize(12);
@@ -515,6 +523,8 @@ void Screen::rebuild()
         const auto fresh = [&](const App &a)
         { return !a.local_only && listed(a) && !a.added.empty() && today - day(a.added) <= 30; };
         const auto current = [&](const App &a) { return !a.local_only && listed(a); };
+        const auto renewed = [](const App &a)
+        { return !a.released.empty() && (a.added.empty() || a.released > a.added); };
         shelf("Updates for you", [](const App &a) { return a.badge == "Update"; }, 0);
         if (std::any_of(all.begin(), all.end(), [&](auto index) { return fresh(apps_[index]); }))
         {
@@ -528,8 +538,11 @@ void Screen::rebuild()
                 "Recently updated",
                 [&](const App &a)
                 {
-                    return current(a) && std::find(shown_new.begin(), shown_new.end(),
-                                                   a.title_id) == shown_new.end();
+                    // An update is a release published after the catalog listed the app; an edit to
+                    // the listing (a new category, a corrected description) is not.
+                    return current(a) && renewed(a) &&
+                           std::find(shown_new.begin(), shown_new.end(), a.title_id) ==
+                               shown_new.end();
                 },
                 1);
         }
