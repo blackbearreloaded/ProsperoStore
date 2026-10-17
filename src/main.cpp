@@ -460,6 +460,7 @@ int main()
                     apps.back().available_version = entry.content_version;
                     apps.back().size = entry.size;
                     apps.back().added = entry.added;
+                    apps.back().category = entry.category;
                     apps.back().extra = entry.extra;
                 }
 #ifdef STORE_DEBUG_TRACE

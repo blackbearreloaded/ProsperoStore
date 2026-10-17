@@ -104,6 +104,29 @@ constexpr float kCloseHold = 1.2f;
 constexpr const char *kSectionNames[] = {"Discover",    "Apps",      "Games",  "Tools",
                                          "Coming soon", "Installed", "Updates"};
 
+// The catalog's categories, in the order its shelves are shown (the catalog's docs/metadata.md).
+constexpr std::pair<std::string_view, std::string_view> kCategories[] = {
+    {"console-ports", "Console game ports"},
+    {"pc-ports", "PC game ports"},
+    {"homebrew-games", "Homebrew games"},
+    {"emulators", "Emulators"},
+    {"streaming", "Game streaming"},
+    {"video", "Video & TV"},
+    {"music", "Music & audio"},
+    {"ai", "AI"},
+    {"utilities", "Utilities"},
+    {"tools", "Tools & tests"},
+    {"showcases", "Showcases"},
+};
+
+std::string category_label(std::string_view key)
+{
+    for (const auto &[known, label] : kCategories)
+        if (known == key)
+            return std::string(label);
+    return {};
+}
+
 // What one pass over the cards records: all covers, then all shapes, then each
 // face, so a grid costs a few draw calls instead of several per card.
 enum Layer : unsigned
@@ -385,6 +408,8 @@ void Screen::rebuild()
     for (int &count : counts_)
         count = 0;
     const auto query = folded(query_);
+    // A grid section narrowed to one category (L2 / R2); its counts still hold the whole section.
+    const bool narrowed = !category_.empty() && !categories_here().empty();
     for (std::size_t i = 0; i < apps_.size(); ++i)
     {
         const App &app = apps_[i];
@@ -395,7 +420,7 @@ void Screen::rebuild()
             continue;
         for (int section = 0; section < kSections; ++section)
             counts_[section] += in_section(app, section) ? 1 : 0;
-        if (in_section(app, section_))
+        if (in_section(app, section_) && (!narrowed || app.category == category_))
             visible_.push_back(i);
     }
     const auto likes = [&](const App &app)
@@ -513,9 +538,21 @@ void Screen::rebuild()
         // The apps people upvoted, in order: there once the likes are known and some app has one.
         if (social_shown())
             shelf("Most liked", [&](const App &a) { return current(a) && likes(a) > 0; }, 3);
-        shelf("Apps", [&](const App &a) { return a.kind == "app" && listed(a); }, 0);
-        shelf("Games", [&](const App &a) { return a.kind == "game" && listed(a); }, 0);
-        shelf("Tools", [&](const App &a) { return a.kind == "tool" && listed(a); }, 0);
+        // A shelf for each category, in the catalog's order. An app without a known category (from
+        // an older or a custom catalog) stays on the shelf of its kind.
+        for (const auto &[key, label] : kCategories)
+            shelf(
+                std::string(label),
+                [&, key = key](const App &a) { return a.category == key && listed(a); }, 0);
+        shelf(
+            "Apps",
+            [&](const App &a) { return a.category.empty() && a.kind == "app" && listed(a); }, 0);
+        shelf(
+            "Games",
+            [&](const App &a) { return a.category.empty() && a.kind == "game" && listed(a); }, 0);
+        shelf(
+            "Tools",
+            [&](const App &a) { return a.category.empty() && a.kind == "tool" && listed(a); }, 0);
         shelf("Coming soon", [](const App &a) { return a.catalog_badge == "Coming soon"; }, 0);
         shelf("On this console", [](const App &a) { return !a.installed.empty(); }, 0);
     }
@@ -1141,10 +1178,40 @@ void Screen::step_section(int delta, bool repeat, ui::Feedback &feedback)
     section_ = next;
     focus_ = 0;
     developer_.clear();
+    category_.clear();
     rebuild();
     swap_.start(0.4f);
     feedback.play(audio::Cue::tab, 0.92f + 0.04f * static_cast<float>(next),
                   ui::pan_for_x(chips_[next].cx()));
+}
+
+std::vector<std::string_view> Screen::categories_here() const
+{
+    std::vector<std::string_view> found;
+    if (section_ < 1 || section_ > 4 || !query_.empty() || !developer_.empty())
+        return found;
+    for (const auto &[key, label] : kCategories)
+        if (std::any_of(apps_.begin(), apps_.end(), [&, key = key](const App &a)
+                        { return a.category == key && in_section(a, section_); }))
+            found.push_back(key);
+    return found;
+}
+
+void Screen::step_category(int delta, ui::Feedback &feedback)
+{
+    const auto here = categories_here();
+    if (here.size() < 2)
+        return refuse(feedback, false, static_cast<float>(delta), 0.0f);
+    // All of the section first, then each category; L2 and R2 go round.
+    const auto at = std::find(here.begin(), here.end(), category_);
+    const int total = static_cast<int>(here.size()) + 1;
+    int index = at == here.end() ? 0 : static_cast<int>(at - here.begin()) + 1;
+    index = ((index + delta) % total + total) % total;
+    category_ = index == 0 ? std::string() : std::string(here[static_cast<std::size_t>(index - 1)]);
+    focus_ = 0;
+    rebuild();
+    swap_.start(0.3f);
+    feedback.play(audio::Cue::select);
 }
 
 void Screen::show_banner(int slot)
@@ -1177,6 +1244,8 @@ void Screen::update_home(const InputFrame &input, ui::Feedback &feedback)
     }
     if (input.is_pressed(Action::page_next) || input.is_pressed(Action::page_prev))
         return step_section(input.is_pressed(Action::page_next) ? 1 : -1, false, feedback);
+    if (!discover() && (input.is_pressed(Action::jump_next) || input.is_pressed(Action::jump_prev)))
+        return step_category(input.is_pressed(Action::jump_next) ? 1 : -1, feedback);
     if (section_ == 6 && input.is_pressed(Action::west) && !visible_.empty())
     {
         // Update all: every update on this shelf, in the order shown.
@@ -2016,7 +2085,8 @@ void Screen::draw_stage(const ui::Fonts &fonts)
             : app.catalog_badge == "Coming soon" ? "COMING SOON"
             : featured_now && banner_ == 0       ? "NEW RELEASE"
             : featured_now                       ? "FEATURED"
-                           : ui::upper(app.kind.empty() ? std::string("app") : app.kind);
+            : !app.category.empty()              ? ui::upper(category_label(app.category))
+                                    : ui::upper(app.kind.empty() ? std::string("app") : app.kind);
         list.push_opacity(alpha);
         list.push_transform(1.0f, 0, 0, dx, 0);
         list.rounded_rect({kMargin, kStageKickerY - 9.0f, 28.0f, 3.0f}, 1.5f, kAccent);
@@ -2031,7 +2101,9 @@ void Screen::draw_stage(const ui::Fonts &fonts)
             if (!part.empty())
                 meta += (meta.empty() ? "" : "  \xC2\xB7  ") + part;
         };
-        if (!app.kind.empty())
+        if (!app.category.empty())
+            add(category_label(app.category));
+        else if (!app.kind.empty())
         {
             std::string kind = app.kind;
             kind[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(kind[0])));
@@ -2115,9 +2187,11 @@ void Screen::draw_stage(const ui::Fonts &fonts)
 void Screen::draw_section_header(const ui::Fonts &fonts)
 {
     auto &list = scene_;
-    const std::string title = !developer_.empty() ? "By " + developer_
-                              : query_.empty()    ? std::string(kSectionNames[section_])
-                                                  : "Results for \"" + query_ + "\"";
+    std::string title = !developer_.empty() ? "By " + developer_
+                        : query_.empty()    ? std::string(kSectionNames[section_])
+                                            : "Results for \"" + query_ + "\"";
+    if (!category_.empty() && !categories_here().empty())
+        title += " \xC2\xB7 " + category_label(category_);
     const float w = ui::text(list, fonts.display, fonts.display.font->fit(title, 60, 1100.0f),
                              kMargin - 3.0f, kHeaderY, 60, kInk);
     ui::text(list, fonts.mono, std::to_string(visible_.size()), kMargin + w + 18.0f, kHeaderY, 26,
@@ -3036,8 +3110,11 @@ void Screen::draw_page(const ui::Fonts &fonts, std::uint32_t glass)
             list.image(texture, kPageIcon, gfx::kFullUv, kWhite, 30);
         list.bordered_rect(kPageIcon, 30, kClear, 1.5f, kInk.with_alpha(0.2f));
     }
-    ui::text(list, fonts.semibold, ui::upper(app.local_only ? "installed" : app.kind), kInfoX, 362,
-             20, kAccent, gfx::Align::left, 4.0f);
+    const std::string kicker = app.local_only         ? std::string("installed")
+                               : app.category.empty() ? app.kind
+                                                      : category_label(app.category);
+    ui::text(list, fonts.semibold, ui::upper(kicker), kInfoX, 362, 20, kAccent, gfx::Align::left,
+             4.0f);
     const ui::FontRef &headline = face_for(app.name, fonts.display, fonts.semibold);
     ui::text(list, headline, headline.font->fit(app.name, 84, 1180.0f), kInfoX - 4.0f, 450, 84,
              kInk);
@@ -3332,7 +3409,7 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
 
     const auto glyphs = ui::GlyphStyle::dark();
     const bool all = section_ == 6 && !visible_.empty() && installer_ && guard_;
-    ui::Hint home[7];
+    ui::Hint home[8];
     int homes = 0;
     if (!visible_.empty())
         home[homes++] = {ui::Button::cross, "Details"};
@@ -3340,6 +3417,8 @@ void Screen::draw(gfx::Renderer &renderer, const ui::Fonts &fonts)
                      all ? "Update all" : "Search"};
     if (!discover())
         home[homes++] = {ui::Button::right_stick, "Sort"};
+    if (categories_here().size() >= 2)
+        home[homes++] = {ui::Button::l2, "Category", ui::Button::r2};
     if (!all)
         home[homes++] = {ui::Button::square, "Downloads"};
     home[homes++] = {ui::Button::l1, "Sections", ui::Button::r1};

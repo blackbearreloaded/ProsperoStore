@@ -92,6 +92,15 @@ int main()
     std::vector<Entry> labelled;
     assert(parse_index(listed, labelled, error) && labelled.size() == 2);
     assert(labelled[0].sandbox == "stays" && labelled[1].sandbox.empty());
+    // The category: a key this version knows, and nothing (never an error) for one it doesn't.
+    const char *shelves =
+        R"({"schema":3,"apps":[{"titleid":"PPSA99001","name":"A","kind":"app","status":"coming_soon","category":"emulators"},)"
+        R"({"titleid":"PPSA99002","name":"B","kind":"app","status":"coming_soon","category":"holograms"},)"
+        R"({"titleid":"PPSA99003","name":"C","kind":"app","status":"coming_soon"}]})";
+    std::vector<store::catalog::Entry> sorted;
+    assert(store::catalog::parse_index(shelves, sorted, error));
+    assert(sorted[0].category == "emulators" && sorted[1].category.empty() &&
+           sorted[2].category.empty());
     auto bad_icon = full_icon;
     bad_icon.replace(bad_icon.find("https://homebrew.page"), 21, "https://untrusted.example");
     assert(parse_detail(bad_icon, "PPSA99000", detail, error)); // Custom HTTPS icon host.

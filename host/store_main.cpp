@@ -71,6 +71,61 @@ static void check_artwork_requests()
     assert(screen.artwork().empty());
 }
 
+static void check_categories()
+{
+    store::Screen screen;
+    store::App doom, mario, eden, old;
+    doom.title_id = "PPSA99001";
+    doom.name = "Doom";
+    doom.kind = "game";
+    doom.category = "pc-ports";
+    mario.title_id = "PPSA99002";
+    mario.name = "Mario";
+    mario.kind = "game";
+    mario.category = "console-ports";
+    eden.title_id = "PPSA99003";
+    eden.name = "Eden";
+    eden.kind = "app";
+    eden.category = "emulators";
+    old.title_id = "PPSA99004";
+    old.name = "Old Game";
+    old.kind = "game"; // from a catalog without categories
+    screen.set_catalog({doom, mario, eden, old}, "test");
+    hui::InputFrame next, r2, l2;
+    next.pressed = hui::action_bit(hui::Action::page_next);
+    r2.pressed = hui::action_bit(hui::Action::jump_next);
+    l2.pressed = hui::action_bit(hui::Action::jump_prev);
+    hui::ui::Feedback quiet;
+    const auto shown = [&]
+    {
+        auto ids = screen.artwork();
+        std::sort(ids.begin(), ids.end());
+        return ids;
+    };
+    using Ids = std::vector<std::string>;
+    // Games: all four kinds of game first, then R2 steps through the categories it holds in the
+    // catalog's order (console ports before PC ports) and back round to all of them.
+    screen.update(next, 1.0f / 60.0f, quiet);
+    screen.update(next, 1.0f / 60.0f, quiet);
+    assert(shown() == (Ids{doom.title_id, mario.title_id, old.title_id}));
+    screen.update(r2, 1.0f / 60.0f, quiet);
+    assert(shown() == Ids{mario.title_id});
+    screen.update(r2, 1.0f / 60.0f, quiet);
+    assert(shown() == Ids{doom.title_id});
+    screen.update(r2, 1.0f / 60.0f, quiet);
+    assert(shown() == (Ids{doom.title_id, mario.title_id, old.title_id}));
+    screen.update(l2, 1.0f / 60.0f, quiet);
+    assert(shown() == Ids{doom.title_id});
+    // Another section starts with all of its apps again.
+    screen.update(next, 1.0f / 60.0f, quiet);
+    screen.update(next, 1.0f / 60.0f, quiet);
+    hui::InputFrame back_one;
+    back_one.pressed = hui::action_bit(hui::Action::page_prev);
+    screen.update(back_one, 1.0f / 60.0f, quiet);
+    screen.update(back_one, 1.0f / 60.0f, quiet);
+    assert(shown() == (Ids{doom.title_id, mario.title_id, old.title_id}));
+}
+
 static void check_search_and_sort()
 {
     store::Screen screen;
@@ -653,6 +708,7 @@ int main(int argc, char **argv)
 {
     check_artwork_requests();
     check_likes_and_comments();
+    check_categories();
     check_search_and_sort();
     check_news_and_new_apps();
     check_wrapping_and_closing();
@@ -741,6 +797,7 @@ int main(int argc, char **argv)
                 apps.back().available_version = entry.content_version;
                 apps.back().size = entry.size;
                 apps.back().added = entry.added;
+                apps.back().category = entry.category;
                 apps.back().extra = entry.extra;
                 // A preview of the shelves with a catalog that doesn't date its apps yet.
                 if (argc == 5 && std::string(argv[4]) == "whats-new" && entry.added.empty())
@@ -819,12 +876,18 @@ int main(int argc, char **argv)
                     settle(20);
                 }
             }
-            else if (mode == "games" || mode == "apps")
+            else if (mode == "games" || mode == "apps" || mode == "games-category")
             {
                 hui::InputFrame section;
                 section.pressed = hui::action_bit(hui::Action::page_next);
                 for (int index = 0; index < (mode == "apps" ? 1 : 2); ++index)
                     screen.update(section, 1.0f / 60.0f, feedback);
+                if (mode == "games-category")
+                {
+                    hui::InputFrame r2;
+                    r2.pressed = hui::action_bit(hui::Action::jump_next);
+                    screen.update(r2, 1.0f / 60.0f, feedback);
+                }
                 settle(30);
                 screen.update(right, 1.0f / 60.0f, feedback);
                 settle(20);

@@ -47,8 +47,9 @@ struct App
     bool ambient = false; // the background was made from the icon (make_ambient)
     hui::gfx::Color accent = hui::gfx::Color::rgb(0x42358f);
     std::uint64_t size = 0;
-    std::string added = {}; // when the catalog first listed it
-    bool extra = false;     // from the custom catalog: it has no likes or comments
+    std::string added = {};    // when the catalog first listed it
+    std::string category = {}; // its shelf: a catalog category key, or empty
+    bool extra = false;        // from the custom catalog: it has no likes or comments
 };
 
 // What the page asks the installer to do. The frame loop hands it to the
@@ -350,6 +351,10 @@ class Screen
     float focus_radius() const;
     float scroll_target() const;
     void refuse(hui::ui::Feedback &feedback, bool repeat, float dx, float dy);
+    // The categories the current section holds, in the catalog's order (none in Discover, a
+    // search or a developer's apps), and L2 / R2 stepping through them.
+    std::vector<std::string_view> categories_here() const;
+    void step_category(int delta, hui::ui::Feedback &feedback);
     void step_section(int delta, bool repeat, hui::ui::Feedback &feedback);
     void show_banner(int slot);
     void update_home(const hui::InputFrame &input, hui::ui::Feedback &feedback);
@@ -477,6 +482,7 @@ class Screen
     system::Inventory inventory_;
     bool inventory_ready_ = false, catalog_current_ = false;
     std::string query_;
+    std::string category_; // the category a grid section is narrowed to; empty for all
     std::string developer_, developer_link_, developer_qr_link_;
     bool developer_support_ = false; // the link is a place to support them
     std::uint32_t developer_qr_ = 0;

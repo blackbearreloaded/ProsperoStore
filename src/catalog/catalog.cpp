@@ -149,6 +149,10 @@ bool read_entry(yyjson_val *value, Entry &entry, bool detail)
         entry.size = yyjson_get_uint(size);
     }
     entry.sandbox = known_word(value, "sandbox", {"stays", "leaves", "unclear"});
+    entry.category =
+        known_word(value, "category",
+                   {"console-ports", "pc-ports", "homebrew-games", "emulators", "streaming",
+                    "video", "music", "ai", "utilities", "tools", "showcases"});
     if (!detail)
         return true;
     // The safety facts are advice shown beside the app; a shape this version doesn't know is

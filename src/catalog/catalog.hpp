@@ -49,6 +49,9 @@ struct Entry
     std::string version, content_version, format, icon, icon_hash, released, updated, large_icon;
     std::string description, license, source, page, artifact, digest, release_notes;
     std::string added; // when the catalog first listed the app; empty from an older catalog
+    // The app's shelf, one of the catalog's category keys; empty from an older catalog or for a
+    // key this version doesn't know.
+    std::string category;
     // Optional: the developer's own page and a place to support them (HTTPS addresses).
     std::string author_url, donate_url;
     std::uint64_t size = 0;
